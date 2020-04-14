@@ -1,0 +1,54 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": ["null", "string"]
+    },
+    "name": {
+      "type": ["null", "string"]
+    },
+    "excel_name": {
+      "type": ["null", "string"]
+    },
+    "status_id": {
+      "type": ["null", "string"]
+    },
+    "calendar_type": {
+      "type": ["null", "string"]
+    },
+    "currency_code": {
+      "type": ["null", "string"]
+    },
+    "description": {
+      "type": ["null", "string"]
+    },
+    "vintage": {
+      "type": ["null", "string"]
+    },
+    "total_committed_capital": {
+      "type": ["null", "number"],
+      "multipleOf": 1e-8
+    },
+    "initial_closed_date": {
+      "type": ["null", "string"],
+      "format": "date-time"
+    },
+    "final_closed_date": {
+      "type": ["null", "string"],
+      "format": "date-time"
+    },
+    "fiscal_year_end": {
+      "type": ["null", "string"],
+      "format": "date-time"
+    },
+    "initial_period": {
+      "type": ["null", "string"],
+      "format": "date-time"
+    },
+    "last_modified_date": {
+      "type": ["null", "string"],
+      "format": "date-time"
+    }
+  }
+}

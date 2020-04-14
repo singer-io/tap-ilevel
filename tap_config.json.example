@@ -1,0 +1,9 @@
+{
+    "username": "YOUR_USERNAME",
+    "password": "YOUR_PASSWORD",
+    "is_sandbox": "true",
+    "wsdl_year": "2019",
+    "wsdl_quarter": "Q1",
+    "start_date": "2019-01-01T00:00:00Z",
+    "user_agent": "tap-ilevel <api_user_email@your_company.com>"
+}
