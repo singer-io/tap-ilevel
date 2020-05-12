@@ -56,7 +56,6 @@ STREAMS = {
         'data_key': 'scenarios'
     },
     'securities': {
-        'key_properties': ['id'],
         'replication_method': 'FULL_TABLE',
         'replication_keys': ['last_modified_date'],
         'data_key': 'securities'

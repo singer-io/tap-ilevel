@@ -156,7 +156,8 @@ def sync_endpoint(client,
         endpoint_total = get_data_items(client, stream, data_key)
     elif stream_name == 'scenarios':
         endpoint_total = get_scenarios(client, stream, data_key)
-        #endpoint_total = mock_method()
+    elif stream_name == 'securities':
+        endpoint_total = get_securities(client, stream, data_key)
     elif stream_name == 'object_relations':
         endpoint_total = get_relations(client, stream, data_key)
     elif stream_name == 'investments':
@@ -719,6 +720,33 @@ def get_scenarios(client, stream, data_key):
         records = result[0]
         total_record_count = len(records)
         LOGGER.info('Preparing to process a total of ' + str(total_record_count) + ' scenarios')
+
+        for record in records:
+            try:
+                transformed_record = transform_record(record, stream, data_key)
+                write_record(stream_name, transformed_record, utils.now())
+                updated_record_count = updated_record_count + 1
+            except Exception as recordErr:
+                err_msg = 'error during transformation for entity: {}, for type: {}, obj: {}'.format(recordErr, stream_name,
+                                                                                                     transformed_record)
+                LOGGER.error(err_msg)
+
+    except Exception as err:
+        err_msg = 'API call failed: {}, for type: {}'.format(err, stream_name)
+        LOGGER.error(err_msg)
+
+    return updated_record_count
+
+def get_securities(client, stream, data_key):
+    updated_record_count = 0
+    stream_name = stream.stream
+    schema = stream.schema.to_dict()
+    try:
+        LOGGER.info('Loading scenarios')
+        result = client.service.GetSecurities()
+        records = result[0]
+        total_record_count = len(records)
+        LOGGER.info('Preparing to process a total of ' + str(total_record_count) + ' securities')
 
         for record in records:
             try:
