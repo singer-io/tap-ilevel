@@ -15,37 +15,38 @@
 STREAMS = {
     'assets': {
         'key_properties': ['id'],
-        'replication_method': 'INCREMENTAL',
-        'replication_keys': ['last_modified_date'],
+        'replication_method': 'FULL_TABLE',
         'data_key': 'assets'
     },
     'currency_rates': {
         'key_properties': ['date', 'currency_from', 'currency_to'],
-        'replication_method': 'INCREMENTAL',
+        'replication_method': 'FULL_TABLE',
         'replication_keys': ['date'],
         'data_key': 'currency_rates'
     },
     'data_items': {
         'key_properties': ['id'],
-        'replication_method': 'INCREMENTAL',
+        'replication_method': 'FULL_TABLE',
         'replication_keys': ['last_modified_date'],
         'data_key': 'data_items'
     },
     'funds': {
         'key_properties': ['id'],
-        'replication_method': 'INCREMENTAL',
-        'replication_keys': ['last_modified_date'],
-        'data_key': 'funds'
+        'replication_method': 'FULL_TABLE',
+        'replication_keys': [],
+        'data_key': 'funds',
+        'payload_ref': 'NamedEntity',
+        "bookmark_type": "datetime"
     },
     'investment_transactions': {
         'key_properties': ['id'],
-        'replication_method': 'INCREMENTAL',
+        'replication_method': 'FULL_TABLE',
         'replication_keys': ['last_modified_date'],
         'data_key': 'investment_transactions'
     },
     'investments': {
         'key_properties': ['id'],
-        'replication_method': 'INCREMENTAL',
+        'replication_method': 'FULL_TABLE',
         'replication_keys': ['last_modified_date'],
         'data_key': 'investments'
     },
@@ -56,15 +57,21 @@ STREAMS = {
     },
     'securities': {
         'key_properties': ['id'],
-        'replication_method': 'INCREMENTAL',
+        'replication_method': 'FULL_TABLE',
         'replication_keys': ['last_modified_date'],
         'data_key': 'securities'
     },
     'segments': {
         'key_properties': ['id'],
-        'replication_method': 'INCREMENTAL',
+        'replication_method': 'FULL_TABLE',
         'replication_keys': ['last_modified_date'],
         'data_key': 'segments'
+    },
+    'object_relations': {
+        'key_properties': ['id'],
+        'replication_method': 'FULL_TABLE',
+        'replication_keys': ['last_modified_date'],
+        'data_key': 'object_relations'
     }
 }
 

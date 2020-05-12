@@ -2,53 +2,41 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "id": {
-      "type": ["null", "string"]
-    },
-    "name": {
-      "type": ["null", "string"]
+    "owner_type_id": {
+      "type": ["null", "integer"]
     },
     "excel_name": {
       "type": ["null", "string"]
     },
-    "status_id": {
+    "color": {
       "type": ["null", "string"]
     },
-    "calendar_type": {
+    "url": {
       "type": ["null", "string"]
     },
-    "currency_code": {
+    "status": {
+      "type": ["null", "integer"]
+    },
+	"currency_code": {
       "type": ["null", "string"]
     },
-    "description": {
+    "enabled_capabilities_string": {
       "type": ["null", "string"]
     },
-    "vintage": {
+    "type_of_plan_id": {
       "type": ["null", "string"]
     },
-    "total_committed_capital": {
-      "type": ["null", "number"],
-      "multipleOf": 1e-8
+	"calendar_type": {
+      "type": ["null", "string"]
     },
-    "initial_closed_date": {
-      "type": ["null", "string"],
-      "format": "date-time"
+    "object_type_id": {
+      "type": ["null", "string"]
     },
-    "final_closed_date": {
-      "type": ["null", "string"],
-      "format": "date-time"
+    "has_logo": {
+      "type": ["null", "boolean"]
     },
-    "fiscal_year_end": {
-      "type": ["null", "string"],
-      "format": "date-time"
-    },
-    "initial_period": {
-      "type": ["null", "string"],
-      "format": "date-time"
-    },
-    "last_modified_date": {
-      "type": ["null", "string"],
-      "format": "date-time"
+    "id": {
+      "type": ["null", "integer"]
     }
   }
 }

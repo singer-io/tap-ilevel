@@ -1,0 +1,1 @@
+Checking stdin for valid Singer-formatted data

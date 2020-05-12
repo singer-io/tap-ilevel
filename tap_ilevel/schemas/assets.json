@@ -3,9 +3,12 @@
   "additionalProperties": false,
   "properties": {
     "id": {
-      "type": ["null", "string"]
+      "type": ["null", "integer"]
     },
     "name": {
+      "type": ["null", "string"]
+    },
+    "object_type_id": {
       "type": ["null", "string"]
     },
     "excel_name": {
@@ -14,51 +17,11 @@
     "calendar_type": {
       "type": ["null", "string"]
     },
-    "asset_status_id": {
-      "type": ["null", "string"]
+    "status": {
+      "type": ["null", "integer"]
     },
-    "currency_code": {
-      "type": ["null", "string"]
-    },
-    "description": {
-      "type": ["null", "string"]
-    },
-    "geography_id": {
-      "type": ["null", "string"]
-    },
-    "parent_asset_id": {
-      "type": ["null", "string"]
-    },
-    "short_description": {
-      "type": ["null", "string"]
-    },
-    "acquisition_date": {
-      "type": ["null", "string"],
-      "format": "date-time"
-    },
-    "exit_date": {
-      "type": ["null", "string"],
-      "format": "date-time"
-    },
-    "acquisition_as_of": {
-      "type": ["null", "string"],
-      "format": "date-time"
-    },
-    "exit_as_of": {
-      "type": ["null", "string"],
-      "format": "date-time"
-    },
-    "fiscal_year_end": {
-      "type": ["null", "string"],
-      "format": "date-time"
-    },
-    "initial_period": {
-      "type": ["null", "string"],
-      "format": "date-time"
-    },
-    "last_modified_date": {
-      "type": ["null", "string"],
-      "format": "date-time"
+    "has_acquisition_as_of": {
+      "type": ["null", "boolean"]
     }
   }
 }

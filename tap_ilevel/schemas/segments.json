@@ -2,36 +2,23 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "string_field": {
+    "excel_name": { 
       "type": ["null", "string"]
     },
-    "boolean_field": {
-      "type": ["null", "boolean"]
-    },
-    "integer_field": {
+    "asset_id": { 
       "type": ["null", "integer"]
     },
-    "datetime_field": {
+    "has_data": { 
+      "type": ["null", "boolean"]
+    },
+    "is_active": { 
+      "type": ["null", "boolean"]
+    },
+    "last_modified_date": { 
       "type": ["null", "string"],
       "format": "date-time"
     },
-    "flexible_nested_object": {
-      "type": ["null", "object"],
-      "additionalProperties": true
-    },
-    "nested_object": {
-      "type": ["null", "object"],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": ["null", "integer"]
-        },
-        "name": {
-          "type": ["null", "string"]
-        }
-      }
-    },
-    "nested_array": {
+    "nodes": {  
       "anyOf": [
         {
           "type": "array",
@@ -39,11 +26,20 @@
             "type": ["null", "object"],
             "additionalProperties": false,
             "properties": {
-              "id": {
+              "excel_name": {
+                "type": ["null", "string"]
+              },
+              "asset_id": {
                 "type": ["null", "integer"]
               },
-              "name": {
-                "type": ["null", "string"]
+              "has_data": {
+                "type": ["null", "boolean"]
+              },
+              "is_active": {
+                "type": ["null", "boolean"]
+              },
+              "parent_id": {
+                "type": ["null", "integer"]
               }
             }
           }
@@ -53,20 +49,8 @@
         }
       ]
     },
-    "single_field_array": {
-      "anyOf": [
-        {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    
-    "ADD_FIELDS_HERE": ""
+    "parent_id": { 
+      "type": ["null", "integer"]
+    }
   }
 }

@@ -1,4 +1,7 @@
 import re
+import pytz
+from singer.utils import strptime_to_utc, strftime
+from datetime import timezone, datetime, timedelta
 
 # Convert camelCase to snake_case
 def convert(name):
@@ -30,8 +33,43 @@ def convert_json(this_json):
             out[new_key] = convert_array(this_json[key])
         else:
             out[new_key] = this_json[key]
+
+    """
+    if new_key=="last_modified_date":
+        old_date = out[new_key]
+        est_datetime = timezone.localize(datetime.datetime.strptime(
+            old_date, "%Y-%m-%d %H:%M:%S"))
+        utc_datetime = strftime(timezone.normalize(est_datetime).astimezone(
+            pytz.utc))
+        out[new_key] = utc_datetime
+"""
     return out
 
+def est_to_utc_datetime(data_dict, data_key, datetime_fields):
+    timezone = pytz.timezone('US/Eastern')
+    new_dict = data_dict
+    if datetime_fields:
+        i = 0
+        for record in data_dict[data_key]:
+            for datetime_field in datetime_fields:
+                est_datetime_val = record.get(datetime_field)
+                if est_datetime_val:
+                    if est_datetime_val == '0000-00-00 00:00:00':
+                        utc_datetime = None
+                    else:
+                        try:
+                            est_datetime = timezone.localize(datetime.datetime.strptime(
+                                est_datetime_val, "%Y-%m-%d %H:%M:%S"))
+                            utc_datetime = strftime(timezone.normalize(est_datetime).astimezone(
+                                pytz.utc))
+                        except ValueError as err:
+                            LOGGER.warning('Value Error: {}'.format(err))
+                            LOGGER.warning('Invalid Date: {}'.format(est_datetime_val))
+                            LOGGER.warning('record: {}'.format(record))
+                            utc_datetime = None
+                    new_dict[data_key][i][datetime_field] = utc_datetime
+            i = i + 1
+    return new_dict
 
 def remove_custom_nodes(this_json):
     if not isinstance(this_json, (dict, list)):
@@ -69,9 +107,7 @@ def convert_custom_fields(this_json):
 
 # Run all transforms: denests _embedded, removes _embedded/_links, and
 #  converst camelCase to snake_case for fieldname keys.
-def transform_json(this_json, path):
-    new_json = remove_custom_nodes(convert_custom_fields(this_json))
-    out = {}
-    out[path] = new_json
-    transformed_json = convert_json(out)
-    return transformed_json[path]
+def transform_json(this_json):
+    transformed_json = convert_json(this_json)
+    print(transformed_json)
+    return transformed_json
