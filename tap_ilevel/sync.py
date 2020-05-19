@@ -126,6 +126,10 @@ def __sync_endpoint(client,
     start_dt = get_start_date(stream_name, endpoint_config.get('bookmark_type'), state, start_date)
     end_dt = get_end_date()
 
+    #Establish bookmark values
+    bookmark_type = endpoint_config.get('bookmark_type')
+    bookmark_field = next(iter(endpoint_config.get('replication_keys', [])), None)
+
     #Get last bookmark date for 'incremental load' objects
     """
     last_bookmark_date = None
@@ -146,9 +150,9 @@ def __sync_endpoint(client,
         LOGGER.warn('CurrencyRate data type is not supported')
         return 0
     if stream_name == 'assets':
-        endpoint_total = __get_assets(client, stream, data_key, last_bookmark_date)
+        endpoint_total = __get_assets(client, stream, data_key, start_dt)
     if stream_name == 'funds':
-        endpoint_total = __get_funds(client, stream, data_key, last_bookmark_date)
+        endpoint_total = __get_funds(client, stream, data_key, start_dt)
     if stream_name == 'data_items':
         endpoint_total = __get_data_items(client, stream, data_key)
     elif stream_name == 'scenarios':
@@ -160,7 +164,7 @@ def __sync_endpoint(client,
     elif stream_name == 'object_relations':
         endpoint_total = __get_relations(client, stream, data_key)
     elif stream_name == 'investments':
-        endpoint_total = __get_investments(client, stream, data_key)
+        endpoint_total = __get_investments(client, stream, data_key, bookmark_type, bookmark_field)
     elif stream_name == 'investment_transactions':
         endpoint_total = __get_investment_transactions(client, stream, data_key, start_dt, end_dt)
     elif stream_name in entity_api_streams:
@@ -690,7 +694,7 @@ def __split_date_range_into_array(start_date, end_date):
 def __get_investment_transactions_for_as_of_date(client, stream, data_key, as_of_date):
     """Retrieve investment transactions for a specific 'AsOfDate' criteria """
 
-    LOGGER.info('Retrieving investment transaction for as of date %s', as_of_date)
+    #LOGGER.info('Retrieving investment transaction for as of date %s', as_of_date)
 
     updated_record_count = 0
     stream_name = stream.stream
@@ -727,7 +731,7 @@ def __get_investment_transactions_for_as_of_date(client, stream, data_key, as_of
 """
  Retrieve investments via API call, publish results.
 """
-def __get_investments(client, stream, data_key):
+def __get_investments(client, stream, data_key, bookmark_type, bookmark_field):
     updated_record_count = 0
     stream_name = stream.stream
     schema = stream.schema.to_dict()
