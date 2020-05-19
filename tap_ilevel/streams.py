@@ -15,28 +15,25 @@
 STREAMS = {
     'assets': {
         'key_properties': ['id'],
-        'replication_method': 'FULL_TABLE',
-        'data_key': 'assets'
-    },
-    'currency_rates': {
-        'key_properties': ['date', 'currency_from', 'currency_to'],
-        'replication_method': 'FULL_TABLE',
-        'replication_keys': ['date'],
-        'data_key': 'currency_rates'
+        'replication_method': 'INCREMENTAL',
+        'data_key': 'assets',
+        'bookmark_type': 'datetime',
+        'replication_keys': ['last_modified_date']
     },
     'data_items': {
         'key_properties': ['id'],
-        'replication_method': 'FULL_TABLE',
+        'replication_method': 'INCREMENTAL',
         'replication_keys': ['last_modified_date'],
         'data_key': 'data_items'
     },
     'funds': {
         'key_properties': ['id'],
-        'replication_method': 'FULL_TABLE',
+        'replication_method': 'INCREMENTAL',
         'replication_keys': [],
         'data_key': 'funds',
         'payload_ref': 'NamedEntity',
-        "bookmark_type": "datetime"
+        "bookmark_type": "datetime",
+        'replication_keys': ['last_modified_date']
     },
     'investment_transactions': {
         'key_properties': ['id'],
@@ -46,9 +43,10 @@ STREAMS = {
     },
     'investments': {
         'key_properties': ['id'],
-        'replication_method': 'FULL_TABLE',
+        'replication_method': 'INCREMENTAL',
         'replication_keys': ['last_modified_date'],
-        'data_key': 'investments'
+        'data_key': 'investments',
+        'bookmark_type': 'datetime'
     },
     'scenarios': {
         'key_properties': ['id'],
@@ -56,15 +54,10 @@ STREAMS = {
         'data_key': 'scenarios'
     },
     'securities': {
-        'replication_method': 'FULL_TABLE',
-        'replication_keys': ['last_modified_date'],
-        'data_key': 'securities'
-    },
-    'segments': {
         'key_properties': ['id'],
         'replication_method': 'FULL_TABLE',
         'replication_keys': ['last_modified_date'],
-        'data_key': 'segments'
+        'data_key': 'securities'
     },
     'object_relations': {
         'key_properties': ['id'],
@@ -73,7 +66,6 @@ STREAMS = {
         'data_key': 'object_relations'
     }
 }
-
 
 def flatten_streams():
     flat_streams = {}

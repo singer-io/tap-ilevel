@@ -3,15 +3,7 @@
   "additionalProperties": false,
   "properties": {
     "amount": { 
-      "anyOf": [
-            {
-                "type": "null"
-            },
-            {
-                "type": "number",
-                "multipleOf": 1e-8
-            }
-          ]
+      "type": ["null", "number"]
     },
     "as_of": {
          "type": ["null", "string"],
@@ -102,7 +94,7 @@
                 "type": ["null", "string"]
             },
             "id":{
-                "type": ["null", "integerr"]
+                "type": ["null", "integer"]
             },
             "last_name":{
                 "type": ["null", "string"]
@@ -144,7 +136,7 @@
               }
         }
     },
-    "Scenario": {
+    "scenario": {
         "type": ["null", "object"],
         "additionalProperties": false,
         "properties": {
@@ -152,6 +144,9 @@
                 "type": ["null", "integer"]
               },
               "name":{
+                  "type": ["null", "string"]
+              },
+            "excel_name":{
                   "type": ["null", "string"]
               }
         }
@@ -195,9 +190,6 @@
          "type": ["null", "string"],
           "format": "date-time"
     },
-    "transaction_type": {
-       "type": ["null", "NamedEntity"]
-    },
     "value_per_share": {
        "anyOf": [
             {
@@ -208,6 +200,33 @@
                 "multipleOf": 1e-8
             }
           ]
+    },
+    "scenario": {
+      "type": ["null", "object"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": ["null", "string"]
+        },
+        "id": {
+          "type": ["null", "integer"]
+        },
+        "excel_name": {
+          "type": ["null", "string"]
+        }
+      }
+    },
+    "transaction_type": {
+      "type": ["null", "object"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": ["null", "string"]
+        },
+        "id": {
+          "type": ["null", "integer"]
+        }
+      }
     }
   }
 }

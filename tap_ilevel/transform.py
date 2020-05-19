@@ -33,16 +33,6 @@ def convert_json(this_json):
             out[new_key] = convert_array(this_json[key])
         else:
             out[new_key] = this_json[key]
-
-    """
-    if new_key=="last_modified_date":
-        old_date = out[new_key]
-        est_datetime = timezone.localize(datetime.datetime.strptime(
-            old_date, "%Y-%m-%d %H:%M:%S"))
-        utc_datetime = strftime(timezone.normalize(est_datetime).astimezone(
-            pytz.utc))
-        out[new_key] = utc_datetime
-"""
     return out
 
 def est_to_utc_datetime(data_dict, data_key, datetime_fields):
@@ -109,5 +99,4 @@ def convert_custom_fields(this_json):
 #  converst camelCase to snake_case for fieldname keys.
 def transform_json(this_json):
     transformed_json = convert_json(this_json)
-    print(transformed_json)
     return transformed_json

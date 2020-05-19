@@ -73,6 +73,7 @@ def main():
     wsdl_quarter = config.get('wsdl_quarter', 'Q1')
     is_sandbox = bool(config.get('is_sandbox', 'false'))
     LOGGER.info('init: is sandbox: ' + config.get('is_sandbox'))
+    #TODO: Enable switch
     # if is_sandbox==True:
     #    sandbox = 'sand'
     # else:
