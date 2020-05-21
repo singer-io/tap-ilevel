@@ -22,14 +22,12 @@ STREAMS = {
     },
     'data_items': {
         'key_properties': ['id'],
-        'replication_method': 'INCREMENTAL',
-        'replication_keys': ['last_modified_date'],
+        'replication_method': 'FULL_TABLE',
         'data_key': 'data_items'
     },
     'funds': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
-        'replication_keys': [],
         'data_key': 'funds',
         'payload_ref': 'NamedEntity',
         "bookmark_type": "datetime",
@@ -37,8 +35,8 @@ STREAMS = {
     },
     'investment_transactions': {
         'key_properties': ['id'],
-        'replication_method': 'FULL_TABLE',
-        'replication_keys': ['last_modified_date'],
+        'replication_method': 'INCREMENTAL',
+        'replication_keys': ['as_of_date'],
         'data_key': 'investment_transactions'
     },
     'investments': {
@@ -62,7 +60,6 @@ STREAMS = {
     'object_relations': {
         'key_properties': ['id'],
         'replication_method': 'FULL_TABLE',
-        'replication_keys': ['last_modified_date'],
         'data_key': 'object_relations'
     }
 }

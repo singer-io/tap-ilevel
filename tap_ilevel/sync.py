@@ -11,6 +11,8 @@ from tap_ilevel.streams import STREAMS
 from pytz import timezone
 import pytz
 import time
+from singer import metrics
+import dateutil.parser
 
 LOGGER = singer.get_logger()
 
@@ -56,16 +58,7 @@ def __write_bookmark(state, stream, value):
     if 'bookmarks' not in state:
         state['bookmarks'] = {}
     state['bookmarks'][stream] = value
-    LOGGER.info('Write state for stream: %s, value: %s', stream, value)
     singer.write_state(state)
-
-"""
-TODO: Remove
-def transform_datetime(this_dttm):
-    with Transformer() as transformer:
-        new_dttm = transformer._transform_datetime(this_dttm)
-    return new_dttm
-"""
 
 """
  Sync a specific endpoint (stream)
@@ -83,20 +76,6 @@ def transform_datetime(this_dttm):
     Data sources/retrieval strategies are as follows. Generally speaking, data retrieval
     methods are fall into two categories; complete table refreshes, or deltas.
     
-    Data Sources:
-    --------------------------------------------------
-        GetUpdatedObjects/GetDeletedObjects:
-            Fund (Delta)
-            Asset (Delta)
-        GetObjects:
-            Security (Full refresh)
-        GetScenarios:
-            Scenario (Full refresh)
-        GetDataItems: (Full refresh)
-            DataItem (Full refresh)
-        GetObjectRelationships:
-            ObjectRelationships (Full refresh)
-            "This method is similar to GetInvestments but returns all existing investments"  
 """
 def __sync_endpoint(client,
                   catalog,
@@ -123,19 +102,12 @@ def __sync_endpoint(client,
     __update_currently_syncing(state, stream_name)
 
     #Define window period for data load
-    start_dt = get_start_date(stream_name, endpoint_config.get('bookmark_type'), state, start_date)
-    end_dt = get_end_date()
+    start_dt = __get_start_date(stream_name, endpoint_config.get('bookmark_type'), state, start_date)
+    end_dt = __get_end_date()
 
     #Establish bookmark values
     bookmark_type = endpoint_config.get('bookmark_type')
     bookmark_field = next(iter(endpoint_config.get('replication_keys', [])), None)
-
-    #Get last bookmark date for 'incremental load' objects
-    """
-    last_bookmark_date = None
-    if endpoint_config.get('bookmark_type')=='INCREMENTAL':
-        LOGGER.info('Determining last bookmark for last stream import')
-    """
 
     # Publish schema to singer
     __write_schema(catalog, stream_name)
@@ -146,38 +118,54 @@ def __sync_endpoint(client,
 
     # Delegate processing to the appropriate routine: Certain entities may be retrieved from a
     # common API call, while others are obtained by alternate sources.
-    if stream_name == 'currency_rates':
-        LOGGER.warn('CurrencyRate data type is not supported')
-        return 0
-    if stream_name == 'assets':
-        endpoint_total = __get_assets(client, stream, data_key, start_dt)
-    if stream_name == 'funds':
-        endpoint_total = __get_funds(client, stream, data_key, start_dt)
-    if stream_name == 'data_items':
-        endpoint_total = __get_data_items(client, stream, data_key)
-    elif stream_name == 'scenarios':
-        endpoint_total = __get_scenarios(client, stream, data_key)
-    elif stream_name == 'segments':
-        endpoint_total = __get_segments(client, stream, data_key)
-    elif stream_name == 'securities':
-        endpoint_total = __get_securities(client, stream, data_key)
-    elif stream_name == 'object_relations':
-        endpoint_total = __get_relations(client, stream, data_key)
-    elif stream_name == 'investments':
-        endpoint_total = __get_investments(client, stream, data_key, bookmark_type, bookmark_field)
-    elif stream_name == 'investment_transactions':
-        endpoint_total = __get_investment_transactions(client, stream, data_key, start_dt, end_dt)
-    elif stream_name in entity_api_streams:
-        endpoint_total = __process_object_stream_type(endpoint_config, state, stream, start_dt,
-                                                    end_dt, client, catalog, bookmark_field)
-
-    __update_currently_syncing(state, None)
+    if(stream_name=="investment_transactions"):
+        endpoint_total = __get_investment_transactions(client, stream, data_key, start_dt, end_dt, state)
+    elif (stream_name in entity_api_streams):
+        endpoint_total =  __process_object_stream_type(endpoint_config, state, stream, start_dt, end_dt, client,
+                               catalog, bookmark_field)
+    else:
+        endpoint_total = __perform_api_call(client, stream, data_key, start_dt, bookmark_field, state)
 
     end = time.time()
     elapsed_time = end - start
     LOGGER.info('Processed a total of %s records for stream %s in %s', endpoint_total, stream_name, elapsed_time)
 
     return endpoint_total
+
+def __perform_api_call(client, stream, data_key, last_bookmark_date, bookmark_field, state):
+    """Retrieve object references by stream name."""
+    updated_record_count = 0
+    stream_name = stream.stream
+    schema = stream.schema.to_dict()
+    records = None
+
+    try:
+        LOGGER.info('Loading assets')
+        if stream_name == 'assets':
+            result = client.service.GetAssets()
+        if stream_name == 'funds':
+            result = client.service.GetFunds()
+        if stream_name == 'data_items':
+            result = client.service.GetDataItems()
+        elif stream_name == 'scenarios':
+            result = client.service.GetScenarios()
+        elif stream_name == 'securities':
+            result = client.service.GetSecurities()
+        elif stream_name == 'object_relations':
+            result = client.service.GetObjectRelationships()
+        elif stream_name == 'investments':
+            result = client.service.GetInvestments()
+
+        records = result[0]
+        total_record_count = len(records)
+        LOGGER.info('Preparing to process a total of %s assets', total_record_count)
+        updated_record_count = process_stream(records, stream, bookmark_field, data_key, last_bookmark_date, state)
+        LOGGER.info('Total number of records processed in stream %s was %s', stream_name, updated_record_count)
+
+    except Exception as err:
+        err_msg = 'API call failed: {}, for type: {}'.format(err, stream_name)
+        LOGGER.error(err_msg)
+
 
 """
  Certain entities (Funds, Assets) are returned via a common API call, which has a limitation on 
@@ -206,15 +194,16 @@ def __process_object_stream_type(endpoint_config, state, stream, start_dt, end_d
         return 0
 
     # Main loop: Process records by date chunks
-    for cur_date_criteria_index in range(cur_date_criteria_length):
-        cur_date_criteria = date_chunks[cur_date_criteria_index]
-        LOGGER.info('processing date range: ' + str(cur_start_date) + "' '" +
-                    str(cur_end_date) + "', " + str(
-                        cur_date_range_index) + " of " + str(cur_date_criteria_length))
+    with metrics.record_counter(stream_name) as counter:
+        for cur_date_criteria_index in range(cur_date_criteria_length):
+            cur_date_criteria = date_chunks[cur_date_criteria_index]
+            LOGGER.info('processing date range: ' + str(cur_start_date) + "' '" +
+                        str(cur_end_date) + "', " + str(
+                            cur_date_range_index) + " of " + str(cur_date_criteria_length))
 
-        endpoint_total = endpoint_total + __process_date_range(stream, cur_start_date,
-                                                             cur_end_date, client, catalog,
-                                                             endpoint_config, bookmark_field)
+            endpoint_total = endpoint_total + __process_date_range(stream, cur_start_date,
+                                                                 cur_end_date, client, catalog,
+                                                                 endpoint_config, bookmark_field)
 
     return endpoint_total
 
@@ -281,9 +270,6 @@ def __process_date_range(stream, cur_start_date, cur_end_date, client, catalog, 
         LOGGER.error(err_msg)
         return 0
 
-    # Retrieve ids for deleted objects for given date range
-    #TODO: Implement
-
     return update_count
 
 """
@@ -315,25 +301,8 @@ def __process_object_set(stream, object_ids, is_deleted_refs, client, catalog, e
     for record in records:
         LOGGER.info('Processing record '+ str(cur_record_count) +' of '+
                     str(total_record_count) +' total')
-
-        #TODO: update status
-        #write_bookmark
-
         try:
             transformed_record = __transform_record(record, stream, data_key)
-
-            """
-            TODO: delete
-            if bookmark_field!=None:
-                write_bookmark(state, stream_name, max_bookmark_value)
-
-            transformed_record[bookmark_field]
-            """
-
-            # Records that have been deleted need additional flag set
-            #if is_deleted_refs == True:
-                # TODO: Set deleted flag
-
 
             __write_record(stream_name, transformed_record, utils.now())
 
@@ -371,18 +340,13 @@ def __transform_record(record, stream, data_key):
             stream.schema.to_dict(),
             stream_metadata)
 
-
-
-    #todo: re-implement
     return transformed_data
 
 """
     Convert an object to a dictionary object, dates are converted as required.
 """
 def __obj_to_dict(obj):
-
     date_fields = {"LastModified", "LastModifiedDate", "AcquisitionDate", "ExitDate", "AsOf", "TransactionDate", "AcquisitionAsOf", "InitialPeriod"}
-
     if not  hasattr(obj, "__dict__"):
         return obj
     result = {}
@@ -481,15 +445,6 @@ def __get_date_chunks(start_date, end_date, max_days):
         else:
             result.append(next_date)
 
-
-    #TODO: Remove hard coded dates
-    """
-    result = []
-    now = datetime.now()
-    result.append(datetime.strptime('2020-04-01', '%Y-%m-%d'))
-    result.append(datetime.strptime('2020-05-01', '%Y-%m-%d'))
-    result.append(datetime.strptime('2020-06-01', '%Y-%m-%d'))
-    """
     return result
 
 """
@@ -526,8 +481,7 @@ def __get_asset_ref(attr, stream_ref):
 """
 def __update_currently_syncing(state, stream_name):
     LOGGER.info('Updating status of current stream processing')
-    LOGGER.info(state)
-    LOGGER.info(stream_name)
+
     if (stream_name is None) and ('currently_syncing' in state):
         del state['currently_syncing']
     else:
@@ -604,68 +558,7 @@ def sync(client, config, catalog, state, base_url):
 def __get_num_days_diff(start_date, end_date):
     return abs((start_date - end_date).days)
 
-"""
- Retrieve full set of relation entities
-"""
-def __get_relations(client, stream, data_key):
-    updated_record_count = 0
-    stream_name = stream.stream
-    schema = stream.schema.to_dict()
-
-    try:
-        result = client.service.GetObjectRelationships()
-        records = result[0]
-        total_record_count = len(records)
-        LOGGER.info('Preparing to process a total of '+ str(total_record_count)
-                    +' object relations')
-
-        for record in records:
-            try:
-                transformed_record = __transform_record(record, stream, data_key)
-                __write_record(stream_name, transformed_record, utils.now())
-                updated_record_count = updated_record_count + 1
-
-            except Exception as recordErr:
-                err_msg = 'error during transformation for entity: {}, for type: {}, obj: {}'.\
-                    format(recordErr, stream_name, transformed_record)
-                LOGGER.error(err_msg)
-
-    except Exception as err:
-        err_msg = 'API call failed: {}, for type: {}'.format(err, stream_name)
-        LOGGER.error(err_msg)
-    return updated_record_count
-
-"""
- Retrieve full set of 'data items' via API call.
-"""
-def __get_data_items(client, stream, data_key):
-    updated_record_count = 0
-    stream_name = stream.stream
-    schema = stream.schema.to_dict()
-
-    try:
-        result = client.service.GetDataItems()
-        records = result[0]
-        total_record_count = len(records)
-        LOGGER.info('Preparing to process a total of ' + str(total_record_count) + ' data items')
-
-        for record in records:
-            try:
-                transformed_record = __transform_record(record, stream, data_key)
-                __write_record(stream_name, transformed_record, utils.now())
-                updated_record_count = updated_record_count + 1
-            except Exception as recordErr:
-                err_msg = 'error during transformation for entity: {}, for type: {}, obj: {}'\
-        .format(recordErr, stream_name, transformed_record)
-                LOGGER.error(err_msg)
-
-    except Exception as err:
-        err_msg = 'API call failed: {}, for type: {}'.format(err, stream_name)
-        LOGGER.error(err_msg)
-
-    return updated_record_count
-
-def __get_investment_transactions(client, stream, data_key, start_date, end_date):
+def __get_investment_transactions(client, stream, data_key, start_date, end_date, state):
     """Retrieve investment transactions from a given point in time. Call operations for each date
     between the specified 'start' and 'end' dates will be individually be requested as this particular
     endpoint requires an 'exact match' on the criteria."""
@@ -674,9 +567,11 @@ def __get_investment_transactions(client, stream, data_key, start_date, end_date
     date_criteria = __split_date_range_into_array(start_date, end_date)
     LOGGER.info('A total of %s requests for invest transactions will be required', len(date_criteria))
     result_count = 0
-    for as_of_date in date_criteria:
-        result_count = result_count + __get_investment_transactions_for_as_of_date(client, stream, data_key, as_of_date)
-        #TODO: Write bookmark
+    with metrics.record_counter('investment transactions') as counter:
+        for as_of_date in date_criteria:
+            result_count = result_count + __get_investment_transactions_for_as_of_date(client, stream, data_key, as_of_date)
+            __write_bookmark(state, stream.stream, __est_to_utc_datetime(as_of_date))
+
     return result_count
 
 def __split_date_range_into_array(start_date, end_date):
@@ -694,7 +589,7 @@ def __split_date_range_into_array(start_date, end_date):
 def __get_investment_transactions_for_as_of_date(client, stream, data_key, as_of_date):
     """Retrieve investment transactions for a specific 'AsOfDate' criteria """
 
-    #LOGGER.info('Retrieving investment transaction for as of date %s', as_of_date)
+    #TODO: Bookmark at date
 
     updated_record_count = 0
     stream_name = stream.stream
@@ -712,160 +607,7 @@ def __get_investment_transactions_for_as_of_date(client, stream, data_key, as_of
         total_record_count = len(records)
         LOGGER.info('Preparing to process a total of %s investment transactions', total_record_count)
 
-        for record in records:
-            try:
-                transformed_record = __transform_record(record, stream, data_key)
-                __write_record(stream_name, transformed_record, utils.now())
-                updated_record_count = updated_record_count + 1
-            except Exception as recordErr:
-                err_msg = 'error during transformation for entity: {}, for type: {}, obj: {}'\
-                    .format(recordErr, stream_name, transformed_record)
-                LOGGER.error(err_msg)
-
-    except Exception as err:
-        err_msg = 'API call failed: {}, for type: {}'.format(err, stream_name)
-        LOGGER.error(err_msg)
-
-    return updated_record_count
-
-"""
- Retrieve investments via API call, publish results.
-"""
-def __get_investments(client, stream, data_key, bookmark_type, bookmark_field):
-    updated_record_count = 0
-    stream_name = stream.stream
-    schema = stream.schema.to_dict()
-    try:
-        result = client.service.GetInvestments()
-        records = result[0]
-        total_record_count = len(records)
-        LOGGER.info('Preparing to process a total of ' + str(total_record_count) + ' investments')
-        transformed_record = None
-        for record in records:
-            try:
-                transformed_record = __transform_record(record, stream, data_key)
-                __write_record(stream_name, transformed_record, utils.now())
-                updated_record_count = updated_record_count + 1
-            except Exception as recordErr:
-                err_msg = 'error during transformation for entity: {}, for type: {}, obj: {}'\
-                    .format(recordErr, stream_name, transformed_record)
-                LOGGER.error(err_msg)
-
-    except Exception as err:
-        err_msg = 'API call failed: {}, for type: {}'.format(err, stream_name)
-        LOGGER.error(err_msg)
-
-    return updated_record_count
-
-"""
-    Retrieve scenarios via API call, publish results.
-"""
-def __get_scenarios(client, stream, data_key):
-    updated_record_count = 0
-    stream_name = stream.stream
-    schema = stream.schema.to_dict()
-    try:
-        LOGGER.info('Loading scenarios')
-        result = client.service.GetScenarios()
-        records = result[0]
-        total_record_count = len(records)
-        LOGGER.info('Preparing to process a total of ' + str(total_record_count) + ' scenarios')
-
-        for record in records:
-            try:
-                transformed_record = __transform_record(record, stream, data_key)
-                __write_record(stream_name, transformed_record, utils.now())
-                updated_record_count = updated_record_count + 1
-            except Exception as recordErr:
-                err_msg = 'error during transformation for entity: {}, for type: {}, obj: {}'\
-                    .format(recordErr, stream_name, transformed_record)
-                LOGGER.error(err_msg)
-
-    except Exception as err:
-        err_msg = 'API call failed: {}, for type: {}'.format(err, stream_name)
-        LOGGER.error(err_msg)
-
-    return updated_record_count
-
-"""
-    Retrieve securities via API call, publish results.
-"""
-def __get_securities(client, stream, data_key):
-    updated_record_count = 0
-    stream_name = stream.stream
-    schema = stream.schema.to_dict()
-    try:
-        LOGGER.info('Loading scenarios')
-        result = client.service.GetSecurities()
-        records = result[0]
-        total_record_count = len(records)
-        LOGGER.info('Preparing to process a total of ' + str(total_record_count) + ' securities')
-
-        for record in records:
-            try:
-                transformed_record = __transform_record(record, stream, data_key)
-                __write_record(stream_name, transformed_record, utils.now())
-                updated_record_count = updated_record_count + 1
-            except Exception as recordErr:
-                err_msg = 'error during transformation for entity: {}, for type: {}, obj: {}'\
-                    .format(recordErr, stream_name, transformed_record)
-                LOGGER.error(err_msg)
-
-    except Exception as err:
-        err_msg = 'API call failed: {}, for type: {}'.format(err, stream_name)
-        LOGGER.error(err_msg)
-
-    return updated_record_count
-
-def __get_assets(client, stream, data_key, last_bookmark_date):
-    updated_record_count = 0
-    stream_name = stream.stream
-    schema = stream.schema.to_dict()
-    try:
-        LOGGER.info('Loading assets')
-        result = client.service.GetAssets()
-        records = result[0]
-        total_record_count = len(records)
-        LOGGER.info('Preparing to process a total of %s assets', total_record_count)
-
-        for record in records:
-            try:
-                transformed_record = __transform_record(record, stream, data_key)
-                __write_record(stream_name, transformed_record, utils.now())
-                updated_record_count = updated_record_count + 1
-            except Exception as recordErr:
-                err_msg = 'error during transformation for entity: {}, for type: {}, obj: {}'\
-                    .format(recordErr, stream_name, transformed_record)
-                LOGGER.error(recordErr)
-                LOGGER.error(err_msg)
-
-    except Exception as err:
-        err_msg = 'API call failed: {}, for type: {}'.format(err, stream_name)
-        LOGGER.error(err_msg)
-
-    return updated_record_count
-
-def __get_funds(client, stream, data_key, last_bookmark_date):
-    updated_record_count = 0
-    stream_name = stream.stream
-    schema = stream.schema.to_dict()
-    try:
-        LOGGER.info('Loading funds')
-        result = client.service.GetFunds()
-        records = result[0]
-        total_record_count = len(records)
-        LOGGER.info('Preparing to process a total of %s funds', total_record_count)
-
-        for record in records:
-            try:
-                transformed_record = __transform_record(record, stream, data_key)
-                __write_record(stream_name, transformed_record, utils.now())
-                updated_record_count = updated_record_count + 1
-            except Exception as recordErr:
-                err_msg = 'error during transformation for entity: {}, for type: {}, obj: {}'\
-                    .format(recordErr, stream_name, transformed_record)
-                LOGGER.error(recordErr)
-                LOGGER.error(err_msg)
+        updated_record_count = process_stream(records, stream, data_key)
 
     except Exception as err:
         err_msg = 'API call failed: {}, for type: {}'.format(err, stream_name)
@@ -885,40 +627,7 @@ def __est_to_utc_datetime(date_val):
         pytz.utc))
     return utc_datetime
 
-"""
-    Retrieve securities via API call, publish results.
-    TODO: No data, remove
-"""
-def __get_segments(client, stream, data_key):
-    updated_record_count = 0
-    """
-    stream_name = stream.stream
-    schema = stream.schema.to_dict()
-    try:
-        LOGGER.info('Loading scenarios')
-        result = client.service.GetSecurities()
-        records = result[0]
-        total_record_count = len(records)
-        LOGGER.info('Preparing to process a total of ' + str(total_record_count) + ' securities')
-
-        for record in records:
-            try:
-                transformed_record = transform_record(record, stream, data_key)
-                write_record(stream_name, transformed_record, utils.now())
-                updated_record_count = updated_record_count + 1
-            except Exception as record_err:
-                err_msg = 'error during transformation for entity: {}, for type: {}, obj: {}'\
-                    .format(record_err, stream_name, transformed_record)
-                LOGGER.error(err_msg)
-
-    except Exception as err:
-        err_msg = 'API call failed: {}, for type: {}'.format(err, stream_name)
-        LOGGER.error(err_msg)
-    """
-    #TODO: Implement
-    return updated_record_count
-
-def get_start_date(stream_name, bookmark_type, state, start_date):
+def __get_start_date(stream_name, bookmark_type, state, start_date):
     """Get start date for a given stream. For streams that are configured to use 'datetime' as a bookmarking
     strategy, the last known bookmark is used (if present). Otherwise, the default start date value is used
     if no bookmark may be located, or in cases where a full table refresh is appropriate."""
@@ -926,10 +635,79 @@ def get_start_date(stream_name, bookmark_type, state, start_date):
     if bookmark_type != 'datetime':
         return datetime.strptime(start_date, '%Y-%m-%dT%H:%M:%SZ')
 
+    #TODO: enable (are we writing)
     #return __get_bookmark(state, stream_name, start_date) #TODO: Remove
 
+    #TODO: remove!
     return datetime.now()-timedelta(days=365)
 
-def get_end_date():
+def __get_end_date():
     """Obtain reference to end date used for tap processing window."""
     return datetime.now()
+
+def process_stream(records, stream, bookmark_field, data_key, start_date, state):
+    """Generic routine for processing objects."""
+    LOGGER.info("processing object stream")
+
+    stream_name = stream.stream
+    updated_record_count = 0
+
+    max_bookmark_value = None
+    i = 0
+    with metrics.record_counter(stream_name) as counter:
+        for record in records:
+
+            try:
+                transformed_record = __transform_record(record, stream, data_key)
+                # If a bookmark is configured for the current stream, then ensure any records that have been added/deleted
+                # have been past the specified start date. Whenever possible, we attempt to sync the minimal number of records
+                # possible
+                if bookmark_field != None:
+                    LOGGER.info('Performing bookmark check')
+
+                    # Filter through records to ensure that we are only publishing records that have been created/updated
+                    cur_date_ref = __convert_iso_8601_date(transformed_record[bookmark_field])
+                    if cur_date_ref<=start_date:
+                        continue
+
+
+                __write_record(stream_name, transformed_record, utils.now())
+                updated_record_count = updated_record_count + 1
+            except Exception as recordErr:
+                err_msg = 'error during transformation for entity: {}, for type: {}, obj: {}' \
+                    .format(recordErr, stream_name, transformed_record)
+                LOGGER.error(recordErr)
+                LOGGER.error(err_msg)
+
+    return updated_record_count
+
+def __convert_iso_8601_date(date_str):
+    """Convert ISO 8601 formatted date string into time zone nieve"""
+    cur_date_ref = dateutil.parser.parse(date_str)
+    cur_date_ref = cur_date_ref.replace(tzinfo=None)
+    return cur_date_ref
+
+def transform_datetime(this_dttm):
+    with Transformer() as transformer:
+        new_dttm = transformer._transform_datetime(this_dttm)
+    return new_dttm
+
+def __get_entities(client, stream, data_key, last_bookmark_date, bookmark_field, state):
+    updated_record_count = 0
+    stream_name = stream.stream
+    schema = stream.schema.to_dict()
+    try:
+        LOGGER.info('Loading assets')
+        result = client.service.GetAssets()
+        records = result[0]
+        total_record_count = len(records)
+        LOGGER.info('Preparing to process a total of %s records for stream %stream_name', total_record_count, stream_name)
+
+        updated_record_count = process_stream(records, stream, bookmark_field, data_key, last_bookmark_date, state)
+
+        LOGGER.info('Total number of records processed in stream %s was %s', stream_name, updated_record_count)
+    except Exception as err:
+        err_msg = 'API call failed: {}, for type: {}'.format(err, stream_name)
+        LOGGER.error(err_msg)
+
+    return updated_record_count

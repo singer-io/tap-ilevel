@@ -1,11 +1,14 @@
 {
   "type": "object",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "properties": {
     "id": {
       "type": ["null","integer"]
     },
     "object_type_id": {
+      "type": ["null","string"]
+    },
+    "description": {
       "type": ["null","string"]
     },
     "scenario_i_ds_string": {
