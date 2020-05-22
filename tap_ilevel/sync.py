@@ -501,7 +501,7 @@ def sync(client, config, catalog, state, base_url):
 
     # Get selected_streams from catalog, based on state last_stream
     #   last_stream = Previous currently synced stream, if the load was interrupted
-    last_stream = singer.get_currently_syncing(state) #TODO: Review
+    last_stream = singer.get_currently_syncing(state)
     LOGGER.info('last/currently syncing stream: {}'.format(last_stream))
     selected_streams = []
     selected_streams_by_name = {}
@@ -589,8 +589,6 @@ def __split_date_range_into_array(start_date, end_date):
 def __get_investment_transactions_for_as_of_date(client, stream, data_key, as_of_date):
     """Retrieve investment transactions for a specific 'AsOfDate' criteria """
 
-    #TODO: Bookmark at date
-
     updated_record_count = 0
     stream_name = stream.stream
     schema = stream.schema.to_dict()
@@ -635,11 +633,12 @@ def __get_start_date(stream_name, bookmark_type, state, start_date):
     if bookmark_type != 'datetime':
         return datetime.strptime(start_date, '%Y-%m-%dT%H:%M:%SZ')
 
-    #TODO: enable (are we writing)
-    #return __get_bookmark(state, stream_name, start_date) #TODO: Remove
+    bookmark =  __get_bookmark(state, stream_name, start_date)
 
-    #TODO: remove!
-    return datetime.now()-timedelta(days=365)
+    if bookmark == None:
+        return start_date
+
+    return bookmark
 
 def __get_end_date():
     """Obtain reference to end date used for tap processing window."""
