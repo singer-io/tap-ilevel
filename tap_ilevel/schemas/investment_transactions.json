@@ -216,6 +216,10 @@
         }
       }
     },
+    "is_soft_deleted": {
+      "type": ["null", "boolean"],
+      "default": false
+    },
     "transaction_type": {
       "type": ["null", "object"],
       "additionalProperties": false,

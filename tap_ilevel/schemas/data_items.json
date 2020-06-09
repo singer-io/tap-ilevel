@@ -68,6 +68,13 @@
     },
     "asset_i_ds_string": {
       "type": ["null","string"]
+    },
+    "enabled_capabilities_string": {
+      "type": ["null","string"]
+    },
+    "is_soft_deleted": {
+      "type": ["null", "boolean"],
+      "default": false
     }
   }
 }

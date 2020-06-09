@@ -37,6 +37,10 @@
     },
     "currency": {
       "type": ["null", "string"]
+    },
+    "is_soft_deleted": {
+      "type": ["null", "boolean"],
+      "default": false
     }
   }
 }

@@ -1,0 +1,128 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "currency_code": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "data_item_id": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "data_value_type": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "end_of_period_is_fiscal": {
+      "type": [
+        "null",
+        "boolean"
+      ]
+    },
+    "end_of_period_periods_quantity": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "end_of_period_type": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "end_of_period_value": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "format": "datetime"
+    },
+    "entity_path": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "formula_type_id_s_string": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "period_is_offset": {
+      "type": [
+        "null",
+        "boolean"
+      ]
+    },
+    "period_quantity": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "period_type": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "report_date_is_fiscal": {
+      "type": [
+        "null",
+        "boolean"
+      ]
+    },
+    "report_date_periods_quantity": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "report_date_type": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "reported_date_value": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "format": "datetime"
+    },
+    "scenario_id": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "standardized_data_id": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "value_numeric": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "value_string": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  }
+}

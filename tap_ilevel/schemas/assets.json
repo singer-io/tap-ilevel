@@ -63,6 +63,10 @@
     "industry_id": {
       "type": ["null", "integer"]
     },
+    "is_soft_deleted": {
+      "type": ["null", "boolean"],
+      "default": false
+    },
     "period_mapping": {
       "fiscal_period_mapping": {
       "type": ["null", "object"],

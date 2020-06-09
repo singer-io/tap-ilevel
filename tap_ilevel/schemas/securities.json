@@ -69,23 +69,22 @@
 			  "integer"
 		  ]
 	  },
-	  "object_type_id": {
-		  "type": [
-			  "null",
-			  "string"
-		  ]
-	  },
 	  "name": {
 		  "type": [
 			  "null",
 			  "string"
 		  ]
 	  },
+
 	  "object_type_id": {
 	  	"type": [
 			  "null",
 			  "string"
 		  ]
-      }
+      },
+	  "is_soft_deleted": {
+		  "type": ["null", "boolean"],
+		  "default": false
+		}
   }
 }

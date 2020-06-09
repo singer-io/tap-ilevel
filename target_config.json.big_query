@@ -1,0 +1,7 @@
+{
+    "client_id" : 156601,
+    "token" : "b287a9a467cc00121d6ba80c2a8bd7e27412eef3f5827b418e20699eb07150b4",
+    "small_batch_url": "https://api.stitchdata.com/v2/import/batch",
+    "big_batch_url": "https://api.stitchdata.com/v2/import/batch",
+    "batch_size_preferences": {}
+}

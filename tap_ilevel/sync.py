@@ -4,492 +4,37 @@ from singer import metrics, metadata, Transformer, utils
 from singer.utils import strptime_to_utc, strftime
 from tap_ilevel.transform import transform_json
 #from tap_ilevel.streams import STREAMS
-from dateutil.relativedelta import *
+#from dateutil.relativedelta import *
 #import attr
 import json
 from tap_ilevel.streams import STREAMS
-from pytz import timezone
-import pytz
-import time
-from singer import metrics
+from json import JSONEncoder
+
+#from singer import metrics
 import dateutil.parser
 
+from .transform import obj_to_dict, convert_ipush_event_to_obj
+from .request_state import RequestState
+from .iget_formula import IGetFormula
+from .utils import get_date_chunks, strip_record_ids
+from .constants import MAX_ID_CHUNK_SIZE, MAX_DATE_WINDOW,  OBJECT_TYPE_STREAMS,\
+    RELATION_TYPE_STREAM, PERIODIC_DATA_STREAMS, MAX_DATE_WINDOW, STANDARDIZED_PERIODIC_DATA_STREAMS
+
+from .singer_operations import write_record, write_schema, get_bookmark, write_bookmark,\
+    update_currently_syncing, get_updated_object_id_sets, write_record, get_deleted_object_id_sets,\
+    get_object_details_by_ids, get_object_relation_details_by_ids,\
+    get_investment_transaction_details_by_ids, createEntityPath, perform_iget_operation, \
+    get_start_date, get_standardized_ids, perform_igetbatch_operation_for_standardized_id_set
+
+"""
+ sync.py
+
+"""
 LOGGER = singer.get_logger()
 
-MAX_ID_CHUNK_SIZE = 200000 # Requests to retrieve object details are restricted by a limit
 
 """
- Publish schema to singer
-"""
-def __write_schema(catalog, stream_name):
-    stream = catalog.get_stream(stream_name)
-    schema = stream.schema.to_dict()
-    try:
-        singer.write_schema(stream_name, schema, stream.key_properties)
-    except OSError as err:
-        LOGGER.info('OS Error writing schema for: %s', stream_name)
-        raise err
-"""
- Publish individual record...
-"""
-def __write_record(stream_name, record, time_extracted):
-    try:
-        singer.messages.write_record(stream_name, record, time_extracted=time_extracted)
-        LOGGER.info('write_record to singer successful')
-    except OSError as err:
-        LOGGER.info('OS Error writing record for: %s', stream_name)
-        LOGGER.info('record: %s', record)
-        raise err
-    except TypeError as err:
-        LOGGER.info('Type Error writing record for: %s', stream_name)
-        LOGGER.info('record: %s', record)
-        raise err
-
-def __get_bookmark(state, stream, default):
-    """Retrieve current bookmark."""
-    if (state is None) or ('bookmarks' not in state):
-        return default
-    return (
-        state.get('bookmarks', {}).get(stream, default)
-    )
-
-def __write_bookmark(state, stream, value):
-    """Set current bookmark."""
-    if 'bookmarks' not in state:
-        state['bookmarks'] = {}
-    state['bookmarks'][stream] = value
-    singer.write_state(state)
-
-"""
- Sync a specific endpoint (stream)
-
-    According to the documentation: "The Web Services methods can be broken up into six
-    categories" (API Call Descriptions section)
-        • Entities (Assets, Funds, Securities, Scenarios)
-        • Entity Relationships
-        • Data Items
-        • Cash Transactions (Transactions, etc..)
-        • Currency Rates
-        • Documents (Currently not importing)
-
-    The retrieval methods for each data source (stream) will be dependant on the object type.
-    Data sources/retrieval strategies are as follows. Generally speaking, data retrieval
-    methods are fall into two categories; complete table refreshes, or deltas.
-    
-"""
-def __sync_endpoint(client,
-                  catalog,
-                  state,
-                  endpoint_config,
-                  start_date,
-                  stream,
-                  path,
-                  static_params,
-                  selected_streams=None,
-                  base_url=None,
-                  bookmark_field=None,
-                  bookmark_query_field=None,
-                  bookmark_type=None):
-
-    # Top level variables
-    endpoint_total = 0
-    total_records = 0
-    stream_name = stream.stream
-    data_key = endpoint_config.get('data_key')
-    start = time.time()
-
-    LOGGER.info('syncing stream : %s', stream_name)
-    __update_currently_syncing(state, stream_name)
-
-    #Define window period for data load
-    start_dt = __get_start_date(stream_name, endpoint_config.get('bookmark_type'), state, start_date)
-    end_dt = __get_end_date()
-
-    #Establish bookmark values
-    bookmark_type = endpoint_config.get('bookmark_type')
-    bookmark_field = next(iter(endpoint_config.get('replication_keys', [])), None)
-
-    # Publish schema to singer
-    __write_schema(catalog, stream_name)
-    LOGGER.info('Processing date window for stream %s, %s to %s', stream_name, start_dt, end_dt)
-
-    #Define entity types that use a common API for retrieval
-    entity_api_streams = [''] #Add data items
-
-    # Delegate processing to the appropriate routine: Certain entities may be retrieved from a
-    # common API call, while others are obtained by alternate sources.
-    if(stream_name=="investment_transactions"):
-        endpoint_total = __get_investment_transactions(client, stream, data_key, start_dt, end_dt, state)
-    elif (stream_name in entity_api_streams):
-        endpoint_total =  __process_object_stream_type(endpoint_config, state, stream, start_dt, end_dt, client,
-                               catalog, bookmark_field)
-    else:
-        endpoint_total = __perform_api_call(client, stream, data_key, start_dt, bookmark_field, state)
-
-    end = time.time()
-    elapsed_time = end - start
-    LOGGER.info('Processed a total of %s records for stream %s in %s', endpoint_total, stream_name, elapsed_time)
-
-    return endpoint_total
-
-def __perform_api_call(client, stream, data_key, last_bookmark_date, bookmark_field, state):
-    """Retrieve object references by stream name."""
-    updated_record_count = 0
-    stream_name = stream.stream
-    schema = stream.schema.to_dict()
-    records = None
-
-    try:
-        LOGGER.info('Loading assets')
-        if stream_name == 'assets':
-            result = client.service.GetAssets()
-        if stream_name == 'funds':
-            result = client.service.GetFunds()
-        if stream_name == 'data_items':
-            result = client.service.GetDataItems()
-        elif stream_name == 'scenarios':
-            result = client.service.GetScenarios()
-        elif stream_name == 'securities':
-            result = client.service.GetSecurities()
-        elif stream_name == 'object_relations':
-            result = client.service.GetObjectRelationships()
-        elif stream_name == 'investments':
-            result = client.service.GetInvestments()
-
-        records = result[0]
-        total_record_count = len(records)
-        LOGGER.info('Preparing to process a total of %s assets', total_record_count)
-        updated_record_count = process_stream(records, stream, bookmark_field, data_key, last_bookmark_date, state)
-        LOGGER.info('Total number of records processed in stream %s was %s', stream_name, updated_record_count)
-
-    except Exception as err:
-        err_msg = 'API call failed: {}, for type: {}'.format(err, stream_name)
-        LOGGER.error(err_msg)
-
-
-"""
- Certain entities (Funds, Assets) are returned via a common API call, which has a limitation on 
- the duration of the overall specified date range. This method will 'chunk' the given date 
- range (if required) into batches that fall within the limit defined by the API call. Actual 
- processing is delegated to other methods. 
-"""
-def __process_object_stream_type(endpoint_config, state, stream, start_dt, end_dt, client,
-                               catalog, bookmark_field):
-
-    stream_name = stream.stream
-    endpoint_total = 0
-    # Initialization for date related operations:
-    # Operations must be performed in 30 day (max) increments
-    date_chunks = __get_date_chunks(start_dt, end_dt, 30)
-    LOGGER.info('Total number of date periods to process: ' + str(len(date_chunks)))
-    cur_start_date = date_chunks[0]
-    date_chunks.pop(0)
-    cur_end_date = date_chunks[0]
-    date_chunks.pop(0)
-    cur_date_range_index = 1
-    cur_date_criteria_length = len(date_chunks)
-
-    if cur_start_date == cur_end_date:
-        LOGGER.info('Last bookmark matches current date, no processing required')
-        return 0
-
-    # Main loop: Process records by date chunks
-    with metrics.record_counter(stream_name) as counter:
-        for cur_date_criteria_index in range(cur_date_criteria_length):
-            cur_date_criteria = date_chunks[cur_date_criteria_index]
-            LOGGER.info('processing date range: ' + str(cur_start_date) + "' '" +
-                        str(cur_end_date) + "', " + str(
-                            cur_date_range_index) + " of " + str(cur_date_criteria_length))
-
-            endpoint_total = endpoint_total + __process_date_range(stream, cur_start_date,
-                                                                 cur_end_date, client, catalog,
-                                                                 endpoint_config, bookmark_field)
-
-    return endpoint_total
-
-"""
- Process records for a given date range for streams that use a common API call to produce data 
- (Funds, Assets, etc.)
-
- The GetObjectsByIds(...) API calls used to retrieve certain data types enforce limitations 
- on the date range supplied as a parameter (30 days). This method expects the specified 
- date range to fall within the date limit.
-
- Records are retrieved (in chunks if required), converted, and produced.
-"""
-def __process_date_range(stream, cur_start_date, cur_end_date, client, catalog, endpoint_config,
-                       bookmark_field):
-    update_count = 0
-    stream_name = stream.stream
-    # Retrieve ids for updated/inserts objects for given date range
-    try:
-        # Required to establish access to a SOAP alias for a given object type
-        object_type = client.factory.create('tns:UpdatedObjectTypes')
-        # Make call to retrieve updated objects for max 30 day date range (object details to be
-        # retrieved in additional call)
-        updated_asset_ids_all = client.service.GetUpdatedObjects(__get_asset_ref(object_type,
-                                                                               stream_name),
-                                                                 cur_start_date,
-                                                                 cur_end_date)
-        LOGGER.info('Successfully retrieved ids for recently created/updated objects')
-        updated_result_count = len(updated_asset_ids_all)
-
-        # Determine if there are any records to be processed, and if so there is a 20k limitation
-        # for retrieving details by ids.
-        if updated_result_count == 0:
-            LOGGER.info('No inserts/updates available for stream %s', stream_name)
-            return 0
-
-        LOGGER.info('Processing %s updated records', updated_result_count)
-
-
-        id_sets = __split_id_set(updated_asset_ids_all, MAX_ID_CHUNK_SIZE)
-        LOGGER.info('Total number of id set to process is %s', len(updated_asset_ids_all))
-
-        # Outer loop: Iterate through each set of object ids to process (within API limits)
-        id_set_count = 1
-
-        for cur_id_set in id_sets:
-            LOGGER.info('Processing id set %s of %s ', id_set_count, id_sets)
-
-            # Result of id chunking operation will return array based data structure,
-            # first we need to convert
-            # to data type expected by API
-            array_of_int = client.factory.create('ns3:ArrayOfint')
-            array_of_int.int = cur_id_set
-
-            # Perform update operations
-            data_key = endpoint_config.get('data_key', 'data')
-            update_count = update_count + __process_object_set(stream, array_of_int, False,
-                                                             client, catalog,
-                                                             endpoint_config,
-                                                             bookmark_field, data_key)
-            id_set_count = id_set_count + 1
-    except Exception as err:
-        err_msg = 'error: {}, for type: {}'.format(err, stream_name)
-        LOGGER.error(err_msg)
-        return 0
-
-    return update_count
-
-"""
- Sync data for certain entity types (Assets,Funds, etc...) that are retrieved from an API 
- call that produces ids. Given a set of ids, the corresponding object details are retrieved, 
- and then processed. Note: API used to retrieve object details imposes a limit on the 
- number of records that may be submitted, so this method expects the IDs to be under 
- that limit. 
-"""
-def __process_object_set(stream, object_ids, is_deleted_refs, client, catalog, endpoint_config,
-                       bookmark_field, data_key):
-
-    object_type = client.factory.create('tns:UpdatedObjectTypes')
-    stream_name = stream.stream
-    call_response = client.service.GetObjectsByIds(__get_asset_ref(object_type, stream_name),
-                                                   object_ids)
-
-    stream = catalog.get_stream(stream_name)
-
-    total_update_count = 0
-    object_refs = []
-
-
-    total_record_count = len(object_refs)
-    cur_record_count = 1
-
-    records = call_response.NamedEntity
-
-    for record in records:
-        LOGGER.info('Processing record '+ str(cur_record_count) +' of '+
-                    str(total_record_count) +' total')
-        try:
-            transformed_record = __transform_record(record, stream, data_key)
-
-            __write_record(stream_name, transformed_record, utils.now())
-
-            total_update_count = total_update_count + 1
-            LOGGER.info('Updating record count: %s', total_update_count)
-
-        except Exception as err:
-            err_msg = 'error during transformation for entity: {}, for type: {}, obj: {}'\
-                .format(err, stream_name, transformed_record)
-            LOGGER.error(err_msg)
-
-        cur_record_count = cur_record_count + 1
-
-    LOGGER.info('process_object_set: total record count is %s ', total_update_count)
-    return total_update_count
-
-
-"""
- Make data more 'database compliant', i.e. rename columns, convert to UTC timezones, etc. 
- 'transform_data' method needs to ensure raw data matches that in the schemas....
-"""
-def __transform_record(record, stream, data_key):
-    obj_dict = __obj_to_dict(record) #Convert SOAP object to dict
-    object_json_str = json.dumps(obj_dict)  # Object dict converted to JSON string
-    object_json_str = object_json_str.replace('True','true')
-    object_json = json.loads(object_json_str) #Parse JSON
-
-    stream_metadata = metadata.to_map(stream.metadata)
-    transformed_data = transform_json(object_json)
-
-    # singer validation check
-    with Transformer() as transformer:
-        transformed_record = transformer.transform(
-            transformed_data,
-            stream.schema.to_dict(),
-            stream_metadata)
-
-    return transformed_data
-
-"""
-    Convert an object to a dictionary object, dates are converted as required.
-"""
-def __obj_to_dict(obj):
-    date_fields = {"LastModified", "LastModifiedDate", "AcquisitionDate", "ExitDate", "AsOf", "TransactionDate", "AcquisitionAsOf", "InitialPeriod"}
-    if not  hasattr(obj, "__dict__"):
-        return obj
-    result = {}
-    for key, val in obj.__dict__.items():
-        if key.startswith("_"):
-            continue
-        element = []
-        if isinstance(val, list):
-            for item in val:
-                element.append(__obj_to_dict(item))
-        else:
-            element = __obj_to_dict(val)
-        result[key] = element
-
-        if key in date_fields:
-            old_date = result[key]
-            utc_date = __est_to_utc_datetime(old_date)
-            result[key] = utc_date
-    return result
-
-
-"""
- When calls are performed to retrieve object details by id, we are restricted by a 20k limit, so 
- we need to support the ability to split a given set into chunks of a given size. Note, we are 
- accepting a SOAP data type (ArrayOfInts) and returning an array of arrays which will need to 
- be converted prior to submission to any additional SOAP calls.
-"""
-def __split_id_set(array_of_ids, max_len):
-
-    result = []
-    ids = array_of_ids[0]
-
-    if len(ids) < max_len:
-        result.append(ids)
-        return result
-
-    chunk_count = len(ids) / max_len
-    remaining_records = len(ids) % max_len
-    #if (len(ids) % max_len) > 0:
-    #    chunk_count = chunk_count + 1
-    #count = numpy.array_split(ids, chunk_count)
-
-    cur_chunk_index = 0
-    total_index = 0
-    while cur_chunk_index < chunk_count:
-        f = max_len * cur_chunk_index
-        cur_id_set = []
-        while f < max_len:
-            cur_id_set[f] = array_of_ids[total_index]
-            f = f+1
-            total_index = total_index + 1
-        result[cur_chunk_index] = cur_id_set
-        cur_index = cur_index +1
-
-    if remaining_records > 0:
-        cur_id_set = []
-        cur_chunk_index = cur_chunk_index + 1
-        cur_index = 0
-        while cur_index < remaining_records:
-            total_index = total_index + 1
-            cur_id_set[cur_index] = array_of_ids[total_index]
-            cur_index = cur_index + 1
-        result[cur_chunk_index] = cur_id_set
-
-    return result
-
-"""
- Certain API calls have a limitation of 30 day periods, where the process might be launched 
- with an overall activity window of a greater period of time. Date ranges sorted into 30 
- day chunks in preparation for processing.
- 
- Values provided for input dates are in format rerquired by SOAP API (yyyy-mm-dd)
-
- API calls are performed within a maximum 30 day timeframe, so breaking a period of time 
- between two into limited 'chunks' is required
-"""
-def __get_date_chunks(start_date, end_date, max_days):
-
-    td = timedelta(days=max_days)
-    result = []
-
-    days_dif = __get_num_days_diff(start_date, end_date)
-    if days_dif < max_days:
-        return result
-
-    working = True
-    cur_date = start_date
-    result.append(cur_date)
-    next_date = cur_date
-    while working:
-
-        next_date = (next_date + timedelta(days=max_days))
-        if next_date == end_date or next_date > end_date:
-            result.append(end_date)
-            return result
-        else:
-            result.append(next_date)
-
-    return result
-
-"""
- Given stream name, identify the corresponding Soap identifier to send to the API. This is used 
- to identify the type of entity we are retrieving for certain API calls.
-"""
-def __get_asset_ref(attr, stream_ref):
-
-    if stream_ref == 'assets':
-        return attr.Asset
-    elif stream_ref == 'currency_rates':
-        return attr.CurrencyRate
-    elif stream_ref == 'data_items':
-        return attr.DataItem
-    elif stream_ref == 'funds':
-        return attr.Fund
-    elif stream_ref == 'investment_transactions':
-        return attr.InvestmentTransaction
-    elif stream_ref == 'investments':
-        return attr.Investment
-    elif stream_ref == 'scenarios':
-        return attr.Scenario
-    elif stream_ref == 'securities':
-        return attr.Security
-    elif stream_ref == 'segments':
-        return attr.SegmentNode
-    return None
-
-"""
- Currently syncing sets the stream currently being delivered in the state.
- If the integration is interrupted, this state property is used to identify
-  the starting point to continue from.
- Reference: https://github.com/singer-io/singer-python/blob/master/singer/bookmarks.py#L41-L46
-"""
-def __update_currently_syncing(state, stream_name):
-    LOGGER.info('Updating status of current stream processing')
-
-    if (stream_name is None) and ('currently_syncing' in state):
-        del state['currently_syncing']
-    else:
-        singer.set_currently_syncing(state, stream_name)
-    singer.write_state(state)
-
-"""
-    Main routine: orchestrates pulling data for selected streams. 
+    Main routine: orchestrates pulling data for selected streams.
 """
 def sync(client, config, catalog, state, base_url):
     LOGGER.info('sync.py: sync()')
@@ -524,189 +69,350 @@ def sync(client, config, catalog, state, base_url):
             bookmark_query_field = bookmark_query_field = endpoint_config.\
                 get('bookmark_query_field')
             bookmark_type = endpoint_config.get('bookmark_type')
-            __write_schema(catalog, stream_name)
+            write_schema(catalog, stream_name)
             total_records = 1
+            data_key = endpoint_config.get('data_key')
+            start_dt = get_start_date(stream_name, bookmark_type, state,
+                                      start_date)
+
+            req_state = __get_request_state(client, stream_name, data_key, start_dt,
+                                            datetime.now(), state, bookmark_field, stream, path,
+                                            catalog)
 
             # Main sync routine
-            total_records = __sync_endpoint(
-                client=client,
-                catalog=catalog,
-                state=state,
-                endpoint_config=endpoint_config,
-                start_date=start_date,
-                stream=stream,
-                path=path,
-                static_params=endpoint_config.get('params', {}),
-                selected_streams=selected_streams,
-                base_url=base_url,
-                bookmark_field=bookmark_field,
-                bookmark_query_field=None,
-                bookmark_type=None
-            )
+            total_records = __sync_endpoint(req_state)
 
-            __update_currently_syncing(state, None)
+            update_currently_syncing(state, None)
             LOGGER.info('FINISHED Syncing: {}, total_records: {}'.format(
                 stream_name,
                 total_records))
 
     LOGGER.info('sync.py: sync complete')
 
+def __sync_endpoint(req_state):
+    """ Sync a specific endpoint (stream). """
 
-"""
- Provides ability to determine number of days between two given dates.
-"""
-def __get_num_days_diff(start_date, end_date):
-    return abs((start_date - end_date).days)
+    # Top level variables
+    endpoint_total = 0
+    total_records = 0
 
-def __get_investment_transactions(client, stream, data_key, start_date, end_date, state):
-    """Retrieve investment transactions from a given point in time. Call operations for each date
-    between the specified 'start' and 'end' dates will be individually be requested as this particular
-    endpoint requires an 'exact match' on the criteria."""
-    LOGGER.info('Processing date range %s to %s', start_date, end_date)
+    with metrics.job_timer('http_request_duration'):
 
-    date_criteria = __split_date_range_into_array(start_date, end_date)
-    LOGGER.info('A total of %s requests for invest transactions will be required', len(date_criteria))
-    result_count = 0
-    with metrics.record_counter('investment transactions') as counter:
-        for as_of_date in date_criteria:
-            result_count = result_count + __get_investment_transactions_for_as_of_date(client, stream, data_key, as_of_date)
-            __write_bookmark(state, stream.stream, __est_to_utc_datetime(as_of_date))
+        LOGGER.info('syncing stream : %s', req_state.stream_name)
+        update_currently_syncing(req_state.state, req_state.stream_name)
 
-    return result_count
+        # Publish schema to singer
+        write_schema(req_state.catalog, req_state.stream_name)
+        LOGGER.info('Processing date window for stream %s, %s to %s', req_state.stream_name,
+                    req_state.start_dt, req_state.end_dt)
 
-def __split_date_range_into_array(start_date, end_date):
-    """Support the ability to create an array of individual days between two giiven dates"""
-    result = []
+        if(req_state.stream_name in OBJECT_TYPE_STREAMS or req_state.stream_name in RELATION_TYPE_STREAM):
+            #Certain stream types follow a common processing pattern
+            endpoint_total = __process_object_stream(req_state)
+        elif req_state.stream_name in PERIODIC_DATA_STREAMS:
+            endpoint_total = __process_periodic_stream(req_state)
+        elif(req_state.stream_name in STANDARDIZED_PERIODIC_DATA_STREAMS):
+            endpoint_total = __process_standardized_data_stream(req_state)
+        #elif req_state.stream_name=='fund_to_fund_relations':
 
-    delta = end_date - start_date  # as timedelta
+        #elif req_state.stream_name=='asset_to_asset_relations':
 
-    for i in range(delta.days + 1):
-        day = start_date + timedelta(days=i)
-        result.append(day)
+        update_currently_syncing(req_state.state, None)
+        LOGGER.info('FINISHED Syncing: {}, total_records: {}'.format(
+            req_state.stream_name,
+            total_records))
 
-    return result
 
-def __get_investment_transactions_for_as_of_date(client, stream, data_key, as_of_date):
-    """Retrieve investment transactions for a specific 'AsOfDate' criteria """
+    LOGGER.info('sync.py: sync complete')
 
-    updated_record_count = 0
-    stream_name = stream.stream
-    schema = stream.schema.to_dict()
-    try:
-        criteria = client.factory.create('InvestmentTransactionsSearchCriteria')
-        target_date_str = datetime.strftime(as_of_date, '%Y-%m-%d')
-        criteria.AsOfDate = target_date_str
+    return endpoint_total
 
-        result = client.service.GetInvestmentTransactions(criteria)
-        if isinstance(result, str):
+def __get_request_state(client, stream_name, data_key, start_dt, end_dt, state, bookmark_field,
+                        stream, path, catalog):
+    """Given a series of common parameters, combine them into a data structure to minimize
+    complexity of passing frequently used data as method parameters."""
+    req_state = RequestState()
+    req_state.client = client
+    req_state.stream_name = stream_name
+    req_state.data_key = data_key
+    req_state.start_dt = start_dt
+
+    end_dt = end_dt.strftime("%Y %m, %d")
+    end_dt = datetime.strptime(end_dt, "%Y %m, %d")
+
+    req_state.end_dt = end_dt
+    req_state.state = state
+    req_state.bookmark_field = bookmark_field
+    req_state.stream = stream
+    req_state.path = path
+    req_state.catalog = catalog
+    return req_state
+
+def __chunk_results_of_get_updated_data_call():
+    """When call is performed to translate recently modified records into standardized ids, further
+    processing is required to isolate resulting standardized data ids as 20k limited sets in order
+    for next call."""
+
+def __process_object_stream(req_state):
+    """Top level handler for processing default method of updating data."""
+    record_count = 0
+    date_chunks = get_date_chunks(req_state.start_dt, req_state.end_dt, MAX_DATE_WINDOW)
+
+    cur_start_date = None
+    cur_end_date = None
+    cur_date_criteria_length = len(date_chunks)
+    cur_date_range_index = 0
+
+    # Loop through date, and id 'chunks' as appropriate, processing each window.
+    while cur_date_range_index < cur_date_criteria_length:
+        if cur_start_date == None:
+            cur_start_date = date_chunks[0]
+            cur_end_date = date_chunks[1]
+            cur_date_range_index = 2
+        else:
+            cur_start_date = cur_end_date
+            cur_end_date = date_chunks[cur_date_range_index]
+            cur_date_range_index = cur_date_range_index + 1
+
+        LOGGER.info('Processing date range %s of % total (%s - %s)', cur_date_range_index,
+                     cur_date_criteria_length, cur_start_date, cur_end_date)
+
+        process_count = 0
+
+        #Retrieve updated entities for given date range, and send for processing
+        updated_object_id_sets = get_updated_object_id_sets(cur_start_date, cur_end_date,
+                                                            req_state.client, req_state.stream_name)
+
+        if len(updated_object_id_sets)>0:
+            cur_id_set_index = 0
+            for id_set in updated_object_id_sets:
+                LOGGER.info('Processing id set %s of %s total sets', cur_id_set_index,
+                            len(updated_object_id_sets))
+                record_count = record_count + __process_updated_object_stream_id_set(id_set, req_state)
+
+
+        #Retrieve deleted entities for given date range, and send for processing
+        deleted_object_id_sets = get_deleted_object_id_sets(cur_start_date, cur_end_date,
+                                                            req_state.client, req_state.stream_name)
+        if len(deleted_object_id_sets)>0:
+            cur_id_set_index = 0
+            for id_set in updated_object_id_sets:
+                LOGGER.info('Processing id set %s of %s total sets', cur_id_set_index,
+                            len(updated_object_id_sets))
+                record_count = record_count + __process_deleted_object_stream_id_set(id_set, req_state)
+
+                cur_id_set_index = cur_id_set_index + 1
+
+        write_bookmark(req_state.state, req_state.stream_name, cur_end_date)
+
+    return record_count
+
+def __process_updated_object_stream_id_set(object_ids, req_state):
+    update_count = 0
+
+    if req_state.stream_name in OBJECT_TYPE_STREAMS:
+        records = get_object_details_by_ids(object_ids, req_state.stream_name,
+                                             req_state.client)
+    elif req_state.stream_name in RELATION_TYPE_STREAM:
+        records = get_object_relation_details_by_ids(object_ids, req_state.stream_name,
+                                             req_state.client)
+    else:
+        records = get_investment_transaction_details_by_ids(object_ids, req_state.stream_name,
+                                              req_state.client)
+    if len(records)==0:
             return 0
 
-        records = result[0]
-        total_record_count = len(records)
-        LOGGER.info('Preparing to process a total of %s investment transactions', total_record_count)
+    update_count = update_count + process_records(records, req_state)
+    return update_count
 
-        updated_record_count = process_stream(records, stream, data_key)
+def __process_deleted_object_stream_id_set(object_ids, req_state):
+    update_count = 0
 
-    except Exception as err:
-        err_msg = 'API call failed: {}, for type: {}'.format(err, stream_name)
-        LOGGER.error(err_msg)
+    if req_state.stream_name in OBJECT_TYPE_STREAMS:
+        records = get_object_details_by_ids(object_ids, req_state.stream_name,
+                                             req_state.client)
+    elif req_state.stream_name in RELATION_TYPE_STREAM:
+        records = get_object_relation_details_by_ids(object_ids, req_state.stream_name,
+                                             req_state.client)
+    else:
+        records = get_investment_transaction_details_by_ids(object_ids, req_state.stream_name,
+                                              req_state.client)
+    if len(records)==0:
+            return 0
 
-    return updated_record_count
+    update_count = update_count + process_records(records, req_state, True)
+    return update_count
 
-"""
- Date object returned from API call needs to be converted to format required by SingerIO 
-"""
-def __est_to_utc_datetime(date_val):
-    date_str = date_val.strftime("%Y-%m-%d %H:%M:%S")
-    timezone = pytz.timezone('US/Eastern')
-    est_datetime = timezone.localize(datetime.strptime(
-        date_str, "%Y-%m-%d %H:%M:%S"))
-    utc_datetime = strftime(timezone.normalize(est_datetime).astimezone(
-        pytz.utc))
-    return utc_datetime
+def __set_deletion_flag(entity, is_soft_deleted = False):
+    """Set new attribute into entity used to track soft deletion status."""
+    entity[''] = is_soft_deleted
 
-def __get_start_date(stream_name, bookmark_type, state, start_date):
-    """Get start date for a given stream. For streams that are configured to use 'datetime' as a bookmarking
-    strategy, the last known bookmark is used (if present). Otherwise, the default start date value is used
-    if no bookmark may be located, or in cases where a full table refresh is appropriate."""
+def process_records(records, req_state, deletion_flag=None):
+    """Handle low level operations to publish records."""
+    update_count = 0
+    for record in records:
+        try:
+            transformed_record = __transform_record(record, req_state.stream, req_state.data_key)
 
-    if bookmark_type != 'datetime':
-        return datetime.strptime(start_date, '%Y-%m-%dT%H:%M:%SZ')
+            if(deletion_flag!=None):
+                __set_deletion_flag(transformed_record, deletion_flag)
 
-    bookmark =  __get_bookmark(state, stream_name, start_date)
-
-    if bookmark == None:
-        return start_date
-
-    return bookmark
-
-def __get_end_date():
-    """Obtain reference to end date used for tap processing window."""
-    return datetime.now()
-
-def process_stream(records, stream, bookmark_field, data_key, start_date, state):
-    """Generic routine for processing objects."""
-    LOGGER.info("processing object stream")
-
-    stream_name = stream.stream
-    updated_record_count = 0
-
-    max_bookmark_value = None
-    i = 0
-    with metrics.record_counter(stream_name) as counter:
-        for record in records:
-
-            try:
-                transformed_record = __transform_record(record, stream, data_key)
-                # If a bookmark is configured for the current stream, then ensure any records that have been added/deleted
-                # have been past the specified start date. Whenever possible, we attempt to sync the minimal number of records
-                # possible
-                if bookmark_field != None:
-                    LOGGER.info('Performing bookmark check')
-
-                    # Filter through records to ensure that we are only publishing records that have been created/updated
-                    cur_date_ref = __convert_iso_8601_date(transformed_record[bookmark_field])
-                    if cur_date_ref<=start_date:
-                        continue
+            write_record(req_state.stream_name, transformed_record, utils.now())
 
 
-                __write_record(stream_name, transformed_record, utils.now())
-                updated_record_count = updated_record_count + 1
-            except Exception as recordErr:
-                err_msg = 'error during transformation for entity: {}, for type: {}, obj: {}' \
-                    .format(recordErr, stream_name, transformed_record)
-                LOGGER.error(recordErr)
-                LOGGER.error(err_msg)
+            LOGGER.info('Updating record count: %s', update_count)
+            update_count = update_count + 1
+        except Exception as err:
+            err_msg = 'Error during transformation for entity: {}, for type: {}, obj: {}'\
+                .format(err, req_state.stream_name, transformed_record)
+            LOGGER.error(err_msg)
 
-    return updated_record_count
+    LOGGER.info('process_object_set: total record count is %s ', update_count)
+    return update_count
 
-def __convert_iso_8601_date(date_str):
-    """Convert ISO 8601 formatted date string into time zone nieve"""
-    cur_date_ref = dateutil.parser.parse(date_str)
-    cur_date_ref = cur_date_ref.replace(tzinfo=None)
-    return cur_date_ref
 
-def transform_datetime(this_dttm):
+def __transform_record(record, stream, data_key):
+    """ Make data more 'database compliant', i.e. rename columns, convert to UTC timezones, etc.
+     'transform_data' method needs to ensure raw data matches that in the schemas. """
+    obj_dict = obj_to_dict(record) #Convert SOAP object to dict
+    #object_json_str = json.dumps(obj_dict, indent=4, sort_keys=True, default=str)
+    object_json_str = json.dumps(obj_dict, indent=4, cls=DateTimeEncoder)
+    object_json_str = object_json_str.replace('True','true')
+    object_json = json.loads(object_json_str) #Parse JSON
+
+    stream_metadata = metadata.to_map(stream.metadata)
+    transformed_data = transform_json(object_json)
+
+    # singer validation check
     with Transformer() as transformer:
-        new_dttm = transformer._transform_datetime(this_dttm)
-    return new_dttm
+        transformed_record = transformer.transform(
+            transformed_data,
+            stream.schema.to_dict(),
+            stream_metadata)
 
-def __get_entities(client, stream, data_key, last_bookmark_date, bookmark_field, state):
-    updated_record_count = 0
-    stream_name = stream.stream
-    schema = stream.schema.to_dict()
-    try:
-        LOGGER.info('Loading assets')
-        result = client.service.GetAssets()
-        records = result[0]
-        total_record_count = len(records)
-        LOGGER.info('Preparing to process a total of %s records for stream %stream_name', total_record_count, stream_name)
+    return transformed_data
 
-        updated_record_count = process_stream(records, stream, bookmark_field, data_key, last_bookmark_date, state)
+class DateTimeEncoder(JSONEncoder):
+    # Override the default method
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if isinstance(obj, datetime.datetime):
+            return obj.isoformat()
 
-        LOGGER.info('Total number of records processed in stream %s was %s', stream_name, updated_record_count)
-    except Exception as err:
-        err_msg = 'API call failed: {}, for type: {}'.format(err, stream_name)
-        LOGGER.error(err_msg)
+def __process_periodic_stream(req_state):
+    """Requests that deal with periodic data type data, a different pattern is followed to
+    retrieve the appropriate data and publish results."""
 
-    return updated_record_count
+    update_count = 0
+
+    date_chunks = get_date_chunks(req_state.start_dt, req_state.end_dt, MAX_DATE_WINDOW)
+
+    cur_start_date = None
+    cur_end_date = None
+    cur_date_criteria_length = len(date_chunks)
+    cur_date_range_index = 0
+
+    while cur_date_range_index < cur_date_criteria_length:
+
+        if cur_start_date == None:
+            cur_start_date = date_chunks[0]
+            cur_end_date = date_chunks[1]
+            cur_date_range_index = 2
+        else:
+            cur_start_date = cur_end_date
+            cur_end_date = date_chunks[cur_date_range_index]
+            cur_date_range_index = cur_date_range_index + 1
+
+        LOGGER.info('Processing date range %s of %s total date segments (%s - %s)', cur_date_range_index,
+                     cur_date_criteria_length, cur_start_date, cur_end_date)
+
+        #Retrieve appropriate data from date window.
+        updated_object_id_sets = get_updated_object_id_sets(cur_start_date, cur_end_date,
+                                                            req_state.client, req_state.stream_name)
+
+        if len(updated_object_id_sets)==0:
+            continue
+
+        #Execute request. Note this variant of the iGet(...) call provides IDs of objects that were
+        #updated, and not the translated 'stanrdized data ids' which are provided in the second
+        #variant.
+        i_get_results = perform_iget_operation(updated_object_id_sets, req_state.stream_name,
+                                               req_state.client)
+
+        #Publish resulting data
+        update_count = update_count + process_records(i_get_results, req_state)
+
+        write_bookmark(req_state.state, req_state.stream_name, cur_end_date)
+
+    return update_count
+
+def __process_standardized_data_stream(req_state):
+    """Retrieve periodic data based on standardized ids."""
+    update_count = 0
+
+    #Split date windows
+    date_chunks = get_date_chunks(req_state.start_dt, req_state.end_dt, MAX_DATE_WINDOW)
+
+    cur_start_date = None
+    cur_end_date = None
+    cur_date_criteria_length = len(date_chunks)
+    cur_date_range_index = 0
+    while cur_date_range_index < cur_date_criteria_length:
+
+        if cur_start_date==None:
+            cur_start_date = date_chunks[0]
+            cur_end_date = date_chunks[1]
+            cur_date_range_index = 2
+        else:
+            cur_start_date = cur_end_date
+            cur_end_date = date_chunks[cur_date_range_index]
+            cur_date_range_index = cur_date_range_index + 1
+
+        LOGGER.info('Processing date range '+ str(cur_date_range_index) +' of '+
+                    str(cur_date_criteria_length) +' total ('+ str(cur_start_date) +' - '+
+                    str(cur_end_date) +')')
+
+        #Get updated records
+        updated_object_id_sets = get_updated_object_id_sets(cur_start_date, cur_end_date,
+                                                            req_state.client, req_state.stream_name)
+        if len(updated_object_id_sets) == 0:
+            continue
+
+        LOGGER.info('Total number of updated records is %s', len(updated_object_id_sets))
+
+        #Translate to standardized ids
+        for id_set in updated_object_id_sets:
+            standardized_id_sets = get_standardized_ids(id_set, cur_start_date, cur_end_date , req_state)
+            for standardized_id_set in standardized_id_sets:
+                update_count = update_count + process_iget_batch_for_standardized_id_set(standardized_id_set, req_state)
+
+        write_bookmark(req_state.state, req_state.stream_name, cur_end_date)
+
+    return update_count
+
+def process_iget_batch_for_standardized_id_set(std_id_set, req_state):
+    update_count = 0
+
+    std_data_results = perform_igetbatch_operation_for_standardized_id_set(std_id_set, req_state)
+    LOGGER.info('Preparing to publish a total of %s records', len(std_data_results))
+    # Publish results to Singer.
+    for record in std_data_results:
+        try:
+            transformed_record = __transform_record(record, req_state.stream, 'none')
+            write_record(req_state.stream_name, transformed_record, utils.now())
+            LOGGER.info(transformed_record)
+            update_count = update_count + 1
+
+        except Exception as err:
+            err_msg = 'error during transformation for entity (periodic data): ' \
+                .format(err, transformed_record)
+            LOGGER.error(err_msg)
+
+    return update_count
+
+def process_relation_type_stream(req_state):
+    """Handle for stream types that represent relations between objects."""
+
+
+

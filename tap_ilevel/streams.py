@@ -22,7 +22,7 @@ STREAMS = {
     },
     'data_items': {
         'key_properties': ['id'],
-        'replication_method': 'FULL_TABLE',
+        'replication_method': 'INCREMENTAL',
         'data_key': 'data_items'
     },
     'funds': {
@@ -36,7 +36,7 @@ STREAMS = {
     'investment_transactions': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
-        'replication_keys': ['as_of_date'],
+        'replication_keys': ['last_modified'],
         'data_key': 'investment_transactions'
     },
     'investments': {
@@ -57,10 +57,52 @@ STREAMS = {
         'replication_keys': ['last_modified_date'],
         'data_key': 'securities'
     },
-    'object_relations': {
+    'asset_periodic_data': {
+        'key_properties': ['currency_code', 'data_item_id', 'entity_path', 'standardized_data_id', 'scenario_id'],
+        'replication_method': 'INCREMENTAL',
+        'data_key': 'asset_periodic_data',
+        'bookmark_type': 'datetime'
+    },
+    'fund_periodic_data': {
+        'key_properties': ['currency_code', 'data_item_id', 'entity_path', 'standardized_data_id', 'scenario_id'],
+        'replication_method': 'INCREMENTAL',
+        'data_key': 'fund_periodic_data',
+        'bookmark_type': 'datetime'
+    },
+    'data_item_periodic_data': {
+        'key_properties': [],
+        'replication_method': 'INCREMENTAL',
+        'data_key': 'data_item_periodic_data'
+    },
+    'security_periodic_data': {
+        'key_properties': [],
+        'replication_method': 'INCREMENTAL',
+        'data_key': 'data_item_periodic_data'
+    },
+    'fund_to_asset_relations': {
         'key_properties': ['id'],
-        'replication_method': 'FULL_TABLE',
-        'data_key': 'object_relations'
+        'replication_method': 'INCREMENTAL',
+        'data_key': 'fund_to_asset_relations'
+    },
+    'fund_to_fund_relations': {
+        'key_properties': ['id'],
+        'replication_method': 'INCREMENTAL',
+        'data_key': 'fund_to_fund_relation'
+    },
+    'asset_to_asset_relations': {
+        'key_properties': ['id'],
+        'replication_method': 'INCREMENTAL',
+        'data_key': 'asset_to_asset_relations'
+    },
+    'asset_periodic_data_standardized': {
+        'key_properties': ['standardized_data_id','data_item_id'],
+        'replication_method': 'INCREMENTAL',
+        'data_key': 'asset_periodic_data_standardized'
+    },
+    'fund_periodic_data_standardized': {
+        'key_properties': ['standardized_data_id','data_item_id'],
+        'replication_method': 'INCREMENTAL',
+        'data_key': 'fund_periodic_data_standardized'
     }
 }
 

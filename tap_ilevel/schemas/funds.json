@@ -49,12 +49,6 @@
       "type": ["null", "string"],
       "format": "datetime"
     },
-    "owner_type_id": {
-      "type": ["null", "integer"]
-    },
-    "total_comitted_capitol": {
-      "type": ["null", "number"]
-    },
     "status_id": {
       "type": ["null", "integer"]
     },
@@ -63,6 +57,10 @@
     },
     "vintage": {
       "type": ["null", "integer"]
+    },
+    "is_soft_deleted": {
+      "type": ["null", "boolean"],
+      "default": false
     },
     "period_mapping": {
       "fiscal_period_mapping": {
