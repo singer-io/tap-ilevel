@@ -7,8 +7,7 @@ INVESTMENT_TRANSACTION_STREAM = 'investment_transactions'
 RELATION_TYPE_STREAM = ["asset_to_asset_relations", "fund_to_asset_relations",
                         "fund_to_fund_relations"]
 PERIODIC_DATA_STREAMS = ["asset_periodic_data", "fund_periodic_data","data_item_periodic_data"]
-STANDARDIZED_PERIODIC_DATA_STREAMS = ["asset_periodic_data_standardized",
-                                      "fund_periodic_data_standardized"]
+STANDARDIZED_PERIODIC_DATA_STREAMS = ["periodic_data_standardized"]
 PERIODIC_DATA_STREAMS = ["asset_periodic_data", 'fund_periodic_data','relation_periodic_data']
 
 #API calls frequently limit request operations to max window periods, define max period here: Note

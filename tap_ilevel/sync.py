@@ -17,18 +17,41 @@ from .transform import obj_to_dict, convert_ipush_event_to_obj
 from .request_state import RequestState
 from .iget_formula import IGetFormula
 from .utils import get_date_chunks, strip_record_ids
-from .constants import MAX_ID_CHUNK_SIZE, MAX_DATE_WINDOW,  OBJECT_TYPE_STREAMS,\
+from .constants import MAX_ID_CHUNK_SIZE, MAX_DATE_WINDOW, OBJECT_TYPE_STREAMS,\
     RELATION_TYPE_STREAM, PERIODIC_DATA_STREAMS, MAX_DATE_WINDOW, STANDARDIZED_PERIODIC_DATA_STREAMS
-
+"""
 from .singer_operations import write_record, write_schema, get_bookmark, write_bookmark,\
     update_currently_syncing, get_updated_object_id_sets, write_record, get_deleted_object_id_sets,\
     get_object_details_by_ids, get_object_relation_details_by_ids,\
     get_investment_transaction_details_by_ids, createEntityPath, perform_iget_operation, \
-    get_start_date, get_standardized_ids, perform_igetbatch_operation_for_standardized_id_set
+    get_start_date, get_standardized_ids, perform_igetbatch_operation_for_standardized_id_set, \
+    get_standardized_data_id_chunks
+"""
+from .singer_operations import *
 
 """
  sync.py
+ Main routine for syncing data from iLevel data source.
+ Data retrieval methodology:
+      Data migrated from the API falls into the following categories, for which each
+      has a corresponding stream implementation.
 
+      Object types:
+            (Top level entities, note: only certain updates will trigger updates: see periodic data)
+            Assets 
+            Funds
+            Securities
+            DataItems
+            Investments
+
+      Object associations:
+            (Joins, relations between objects.)
+            AssetToAsset
+            FundToAsset
+            FundToFundRelations
+
+      Periodic data:
+            (Reflects state of entity attributes for a given period in time and scenario)
 """
 LOGGER = singer.get_logger()
 
@@ -348,18 +371,25 @@ def __process_periodic_stream(req_state):
     return update_count
 
 def __process_standardized_data_stream(req_state):
-    """Retrieve periodic data based on standardized ids."""
+    """Retrieve periodic data. API docs under 'Migrating iLEVEL Data Changes (Deltas) to a Data
+    Warehouse' (pp 67). Whereas other streams attempt to reflect updates to entities (Assets,
+    Funds, InvestmentTransactions) operations for certain attributes will not be reflected in the
+    API calls used to report updates. This call will reflect all attribute updates for the specified
+    timeframe. Additionally, this call will reflect the state of an attribute at a given point in
+    time (period)."""
     update_count = 0
 
-    #Split date windows
+    #Split date windows: API call restricts date windows based on 30 day periods.
     date_chunks = get_date_chunks(req_state.start_dt, req_state.end_dt, MAX_DATE_WINDOW)
 
     cur_start_date = None
     cur_end_date = None
     cur_date_criteria_length = len(date_chunks)
     cur_date_range_index = 0
+    LOGGER.info('Preparing to process %s date chunks', len(date_chunks))
+    date_chunk_index = 0
     while cur_date_range_index < cur_date_criteria_length:
-
+        LOGGER.info('Processing date set %s of %s total', date_chunk_index, len(date_chunks))
         if cur_start_date==None:
             cur_start_date = date_chunks[0]
             cur_end_date = date_chunks[1]
@@ -373,28 +403,32 @@ def __process_standardized_data_stream(req_state):
                     str(cur_date_criteria_length) +' total ('+ str(cur_start_date) +' - '+
                     str(cur_end_date) +')')
 
-        #Get updated records
-        updated_object_id_sets = get_updated_object_id_sets(cur_start_date, cur_end_date,
-                                                            req_state.client, req_state.stream_name)
+        #Get updated records based on date range
+        updated_object_id_sets = get_standardized_data_id_chunks(cur_start_date, cur_end_date, req_state.client)
         if len(updated_object_id_sets) == 0:
             continue
 
-        LOGGER.info('Total number of updated records is %s', len(updated_object_id_sets))
+        LOGGER.info('Total number of updated sets is %s', len(updated_object_id_sets))
 
         #Translate to standardized ids
         for id_set in updated_object_id_sets:
-            standardized_id_sets = get_standardized_ids(id_set, cur_start_date, cur_end_date , req_state)
-            for standardized_id_set in standardized_id_sets:
-                update_count = update_count + process_iget_batch_for_standardized_id_set(standardized_id_set, req_state)
+            LOGGER.info('Total number of records in current set %s', len(id_set))
+            update_count = update_count + process_iget_batch_for_standardized_id_set(id_set, req_state)
 
         write_bookmark(req_state.state, req_state.stream_name, cur_end_date)
+        date_chunk_index = date_chunk_index + 1
 
     return update_count
 
 def process_iget_batch_for_standardized_id_set(std_id_set, req_state):
+    """Given a set of 'stanardized ids', reflecting attributes that have been updated for a given
+    time window, perform any additional API requests (iGetBatch) to retrieve associated data,
+    and publish results."""
     update_count = 0
 
+    #Retrieve additional details for id criteria.
     std_data_results = perform_igetbatch_operation_for_standardized_id_set(std_id_set, req_state)
+
     LOGGER.info('Preparing to publish a total of %s records', len(std_data_results))
     # Publish results to Singer.
     for record in std_data_results:
@@ -410,9 +444,6 @@ def process_iget_batch_for_standardized_id_set(std_id_set, req_state):
             LOGGER.error(err_msg)
 
     return update_count
-
-def process_relation_type_stream(req_state):
-    """Handle for stream types that represent relations between objects."""
 
 
 

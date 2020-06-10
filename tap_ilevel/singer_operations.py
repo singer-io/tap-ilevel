@@ -219,15 +219,13 @@ def createEntityPath(clientFactory, parentId, childId = None):
 
 	return entityPath
 
-def get_standardized_data_id_chunks(ids, start_dt, end_dt, client):
-    entity_id_criteria = client.factory.create('ns3:ArrayOfint')
-    entity_id_criteria.int = ids
+def get_standardized_data_id_chunks(start_dt, end_dt, client):
 
     # Perform API call to retrieve 'standardized ids' in preparation for next call
     with metrics.http_request_timer('Retrieve standardized ids') as timer:
-        LOGGER.info('API call: Translating records from ids to standardized ids for %s records.',
-                    len(entity_id_criteria))
-        updated_data_ids = client.service.GetUpdatedData(start_dt, end_dt, entity_id_criteria)
+        LOGGER.info('API call: Translating records from ids to standardized ids for date range %s - %s', start_dt, end_dt)
+
+        updated_data_ids = client.service.GetUpdatedData(start_dt, end_dt)
         LOGGER.info('Request time %s', timer.elapsed)
 
     # Validate that there is data to process
@@ -238,33 +236,6 @@ def get_standardized_data_id_chunks(ids, start_dt, end_dt, client):
 
     return split_ids_into_chunks(updated_data_ids_arr, MAX_ID_CHUNK_SIZE)
 
-
-#def get_asset_data_items():
-
-#def get_fund_data_items():
-
-#def get_data_items_by_categoy_ids():
-
-def get_mock_iget_response():
-    results = []
-
-    mock_response = IGetResponse()
-    mock_response.data_item_id = 1
-    mock_response.value_numeric = None
-    mock_response.value_string = 'My string value'
-    mock_response.id = 100
-    mock_response.scenario_id = 1
-    results.append(mock_response)
-
-    mock_response = IGetResponse()
-    mock_response.data_item_id = 2
-    mock_response.value_numeric = 1923232
-    mock_response.value_string = None
-    mock_response.id = 100
-    mock_response.scenario_id = 1
-    results.append(mock_response)
-
-    return results
 
 def perform_iget_operation(obj_ids, stream_name, client):
     """Given a set of ids for a given stream type, perform 'iGetBatch' operations for all
@@ -591,8 +562,8 @@ def perform_igetbatch_operation_for_standardized_id_set(id_set, req_state):
         iGetRequest = req_state.client.factory.create('DataServiceRequest')
         iGetRequest.IncludeStandardizedDataInfo = True
         iGetRequest.ParametersList = iGetParamsList
-
-        data_values = req_state.client.service.iGetBatch(iGetRequest)
+        with metrics.http_request_timer('Perform iGetBatch request for '+ str(len(id_set)) +' criteria items') as timer:
+            data_values = req_state.client.service.iGetBatch(iGetRequest)
         if isinstance(data_values, str):
             return []
 

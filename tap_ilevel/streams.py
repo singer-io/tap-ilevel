@@ -97,12 +97,20 @@ STREAMS = {
     'asset_periodic_data_standardized': {
         'key_properties': ['standardized_data_id','data_item_id'],
         'replication_method': 'INCREMENTAL',
-        'data_key': 'asset_periodic_data_standardized'
+        'data_key': 'asset_periodic_data_standardized',
+        'bookmark_type': 'datetime'
     },
     'fund_periodic_data_standardized': {
         'key_properties': ['standardized_data_id','data_item_id'],
         'replication_method': 'INCREMENTAL',
-        'data_key': 'fund_periodic_data_standardized'
+        'data_key': 'fund_periodic_data_standardized',
+        'bookmark_type': 'datetime'
+    },
+    'periodic_data_standardized': {
+        'key_properties': ['standardized_data_id','data_item_id','end_of_period_type','end_of_period_value'],
+        'replication_method': 'INCREMENTAL',
+        'data_key': 'periodic_data_standardized',
+        'bookmark_type': 'datetime'
     }
 }
 

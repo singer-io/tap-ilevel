@@ -207,7 +207,12 @@ def convert_iso_8601_date(date_str):
 
 def copy_i_get_result(source):
     result = IGetFormula()
-    result.ValueString = source.ValueString
+
+    if hasattr(source, 'ValueString'):
+        result.ValueString = source.ValueString
+
+    if hasattr(source, 'ValueNumeric'):
+        result.ValueNumeric = source.ValueNumeric
 
     result.DataItemId = source.DataItemId
     result.ScenarioId = source.ScenarioId
