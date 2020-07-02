@@ -6,6 +6,7 @@ from tap_ilevel.transform import convert_ipush_event_to_obj, copy_i_get_result
 from tap_ilevel.utils import get_num_days_diff
 from .i_get_response import IGetResponse
 from singer.utils import strptime_to_utc
+from datetime import timedelta
 
 LOGGER = singer.get_logger()
 
@@ -33,13 +34,17 @@ def write_record(stream_name, record, time_extracted):
         LOGGER.error('record: %s', record)
         raise err
 
-def get_bookmark(state, stream, default):
-    """Retrieve current bookmark."""
+def get_bookmark(state, stream):
     if (state is None) or ('bookmarks' not in state):
-        return default
-    return (
-        state.get('bookmarks', {}).get(stream, default)
-    )
+        return None
+
+    bookmarks = state.get('bookmarks')
+    cur_bookmark = bookmarks.get(stream, None)
+
+    if cur_bookmark is None:
+        return None
+
+    return bookmarks.get(stream)
 
 def write_bookmark(state, stream, value):
 
@@ -205,7 +210,7 @@ def get_standardized_data_id_chunks(start_dt, end_dt, client):
     # Perform API call to retrieve 'standardized ids' in preparation for next call
     with metrics.http_request_timer('Retrieve standardized ids') as timer:
 
-        updated_data_ids = client.service.GetUpdatedData(start_dt, end_dt)
+        updated_data_ids = client.service.GetUpdatedData(start_dt, get_adj_end_date(end_dt))
         LOGGER.info('Request time %s', timer.elapsed)
 
     # Validate that there is data to process
@@ -346,21 +351,17 @@ def get_start_date(stream_name, bookmark_type, state, start_date_str):
     bookmarking strategy, the last known bookmark is used (if present). Otherwise, the default
     start date value is used if no bookmark may be located, or in cases where a full table refresh
     is appropriate."""
-
     start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
 
     if bookmark_type != 'datetime':
-        #return datetime.strptime(start_date, '%Y-%m-%d')
         return start_date
 
-    bookmark = get_bookmark(state, stream_name, start_date)
+    bookmark = get_bookmark(state, stream_name)
 
     if bookmark is None:
         return start_date
 
-    bookmark = strptime_to_utc(bookmark)
-
-    return bookmark
+    return datetime.strptime(bookmark,'%Y-%m-%d')
 
 def get_standardized_ids(id_set, start_date, end_date, req_state):
     """Given a set of ids, translate them into 'standardized ids', which is required for calls
@@ -372,7 +373,7 @@ def get_standardized_ids(id_set, start_date, end_date, req_state):
     id_criteria.int = id_set
     # pylint: disable=unused-variable
     with metrics.http_request_timer('Retrieve standardized ids (getUpdatedData)') as timer:
-        updated_data_ids = req_state.client.service.GetUpdatedData(start_date, end_date,
+        updated_data_ids = req_state.client.service.GetUpdatedData(start_date, get_adj_end_date(end_date),
                                                                    id_criteria)
 
     # Validate that there is data to process
@@ -432,3 +433,6 @@ def perform_igetbatch_operation_for_standardized_id_set(id_set, req_state):
 
 
         return results
+
+def get_adj_end_date(target_date):
+    return target_date +timedelta(days=1)

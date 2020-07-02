@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
 from json import JSONEncoder
 import singer
@@ -44,18 +44,16 @@ def sync(client, config, catalog, state):
 
             path = endpoint_config.get('path', stream_name)
             bookmark_field = next(iter(endpoint_config.get('replication_keys', [])), None)
-            #bookmark_query_field = bookmark_query_field = endpoint_config.\
-            #    get('bookmark_query_field')
             bookmark_type = endpoint_config.get('bookmark_type')
             singer_ops.write_schema(catalog, stream_name)
-            total_records = 1
+            total_records = 0
             data_key = endpoint_config.get('data_key')
             start_dt = singer_ops.get_start_date(stream_name, bookmark_type, state,
                                                  start_date)
 
             #Request is made using currrent ddate + 1 as the end period.
             req_state = __get_request_state(client, stream_name, data_key, start_dt,
-                                            datetime.now() +timedelta(days=1), state,
+                                            datetime.now(), state,
                                             bookmark_field, stream, path,
                                             catalog)
 

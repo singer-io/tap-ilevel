@@ -32,8 +32,7 @@ STREAMS = {
         'data_key': 'funds',
         'payload_ref': 'NamedEntity',
         "bookmark_type": "datetime",
-        'replication_keys': ['last_modified_date'],
-        'bookmark_type': 'datetime'
+        'replication_keys': ['last_modified_date']
     },
     'investment_transactions': {
         'key_properties': ['id'],
@@ -46,12 +45,14 @@ STREAMS = {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
         'replication_keys': ['last_modified_date'],
-        'data_key': 'investments'
+        'data_key': 'investments',
+        'bookmark_type': 'datetime'
     },
     'scenarios': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
-        'data_key': 'scenarios'
+        'data_key': 'scenarios',
+        'bookmark_type': 'datetime'
     },
     'securities': {
         'key_properties': ['id'],
