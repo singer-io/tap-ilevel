@@ -10,10 +10,10 @@
     },
     "excel_name": { 
 			"type": ["null", "string"]
-    }
-  },
-  "is_soft_deleted": {
+    },
+    "is_soft_deleted": {
       "type": ["null", "boolean"],
       "default": false
     }
+  }
 }

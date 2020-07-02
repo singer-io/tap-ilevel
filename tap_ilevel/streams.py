@@ -18,12 +18,13 @@ STREAMS = {
         'replication_method': 'INCREMENTAL',
         'data_key': 'assets',
         'bookmark_type': 'datetime',
-        'replication_keys': ['last_modified_date']
+        'replication_keys': ['last_modified_date'],
+        'bookmark_type': 'datetime'
     },
     'data_items': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
-        'data_key': 'data_items'
+        'bookmark_type': 'datetime'
     },
     'funds': {
         'key_properties': ['id'],
@@ -31,20 +32,21 @@ STREAMS = {
         'data_key': 'funds',
         'payload_ref': 'NamedEntity',
         "bookmark_type": "datetime",
-        'replication_keys': ['last_modified_date']
+        'replication_keys': ['last_modified_date'],
+        'bookmark_type': 'datetime'
     },
     'investment_transactions': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
         'replication_keys': ['last_modified'],
-        'data_key': 'investment_transactions'
+        'data_key': 'investment_transactions',
+        'bookmark_type': 'datetime'
     },
     'investments': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
         'replication_keys': ['last_modified_date'],
-        'data_key': 'investments',
-        'bookmark_type': 'datetime'
+        'data_key': 'investments'
     },
     'scenarios': {
         'key_properties': ['id'],
@@ -55,59 +57,29 @@ STREAMS = {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
         'replication_keys': ['last_modified_date'],
-        'data_key': 'securities'
-    },
-    'asset_periodic_data': {
-        'key_properties': ['currency_code', 'data_item_id', 'entity_path', 'standardized_data_id', 'scenario_id'],
-        'replication_method': 'INCREMENTAL',
-        'data_key': 'asset_periodic_data',
+        'data_key': 'securities',
         'bookmark_type': 'datetime'
-    },
-    'fund_periodic_data': {
-        'key_properties': ['currency_code', 'data_item_id', 'entity_path', 'standardized_data_id', 'scenario_id'],
-        'replication_method': 'INCREMENTAL',
-        'data_key': 'fund_periodic_data',
-        'bookmark_type': 'datetime'
-    },
-    'data_item_periodic_data': {
-        'key_properties': [],
-        'replication_method': 'INCREMENTAL',
-        'data_key': 'data_item_periodic_data'
-    },
-    'security_periodic_data': {
-        'key_properties': [],
-        'replication_method': 'INCREMENTAL',
-        'data_key': 'data_item_periodic_data'
     },
     'fund_to_asset_relations': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
-        'data_key': 'fund_to_asset_relations'
+        'data_key': 'fund_to_asset_relations',
+        'bookmark_type': 'datetime'
     },
     'fund_to_fund_relations': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
-        'data_key': 'fund_to_fund_relation'
+        'data_key': 'fund_to_fund_relation',
+        'bookmark_type': 'datetime'
     },
     'asset_to_asset_relations': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
-        'data_key': 'asset_to_asset_relations'
-    },
-    'asset_periodic_data_standardized': {
-        'key_properties': ['standardized_data_id','data_item_id'],
-        'replication_method': 'INCREMENTAL',
-        'data_key': 'asset_periodic_data_standardized',
-        'bookmark_type': 'datetime'
-    },
-    'fund_periodic_data_standardized': {
-        'key_properties': ['standardized_data_id','data_item_id'],
-        'replication_method': 'INCREMENTAL',
-        'data_key': 'fund_periodic_data_standardized',
+        'data_key': 'asset_to_asset_relations',
         'bookmark_type': 'datetime'
     },
     'periodic_data_standardized': {
-        'key_properties': ['standardized_data_id','data_item_id','end_of_period_type','end_of_period_value'],
+        'key_properties': ['standardized_data_id'],
         'replication_method': 'INCREMENTAL',
         'data_key': 'periodic_data_standardized',
         'bookmark_type': 'datetime'

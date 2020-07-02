@@ -113,12 +113,15 @@
       ]
     },
     "value_numeric": {
+      "type": "number"
+    },
+    "value_string": {
       "type": [
         "null",
         "string"
       ]
     },
-    "value_string": {
+    "raw_value": {
       "type": [
         "null",
         "string"

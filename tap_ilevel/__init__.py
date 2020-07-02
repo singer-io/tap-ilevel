@@ -17,8 +17,6 @@ from tap_ilevel.sync import sync
 
 LOGGER = singer.get_logger()
 
-#TODO: Remove, enables logging at SOAP API level
-#LOGGER('suds.serviceproxy').setLevel(LOGGER.DEBUG)
 
 REQUIRED_CONFIG_KEYS = [
     'username',
@@ -29,24 +27,24 @@ REQUIRED_CONFIG_KEYS = [
     'start_date'
 ]
 
-
 class SoapFixer(MessagePlugin):
     def marshalled(self, context):
         # Alter the envelope so that the xsd namespace is allowed
         context.envelope.nsprefixes['xsd'] = 'http://www.w3.org/2001/XMLSchema'
-        # Go through every node in the document and apply the fix function to patch up incompatible XML.
+        # Go through every node in the document and apply the fix function to patch up
+        # incompatible XML.
         context.envelope.walk(self.fix_any_type_string)
 
     def fix_any_type_string(self, element):
         """Used as a filter function with walk in order to fix errors.
-        If the element has a certain name, give it a xsi:type=xsd:int. Note that the nsprefix xsd must also
-        be added in to make this work."""
+        If the element has a certain name, give it a xsi:type=xsd:int. Note that the nsprefix xsd
+        must also be added in to make this work."""
         # Fix elements which have these names
         fix_names = ['DataItemValue']
         if element.name in fix_names:
-            typeAndValue = element.text.split('_')
-            element.attributes.append(Attribute('xsi:type', typeAndValue[0]))
-            element.setText(typeAndValue[1])
+            type_and_value = element.text.split('_')
+            element.attributes.append(Attribute('xsi:type', type_and_value[0]))
+            element.setText(type_and_value[1])
 
 
 def do_discover():
@@ -72,17 +70,20 @@ def main():
 
     wsdl_year = config.get('wsdl_year', '2019')
     wsdl_quarter = config.get('wsdl_quarter', 'Q1')
-    is_sandbox = bool(config.get('is_sandbox', 'false'))
-    LOGGER.info('init: is sandbox: ' + config.get('is_sandbox'))
-    #TODO: Enable switch
-    # if is_sandbox==True:
-    #    sandbox = 'sand'
-    # else:
-    sandbox = ''
+    sandbox_flag = config.get('is_sandbox', 'False')
+    is_sandbox = False
+    if sandbox_flag == "True":
+        sandbox_flag = True
+
+    LOGGER.info('init: is sandbox: %s', config.get('is_sandbox'))
+    if is_sandbox:
+        sandbox = 'sand'
+    else:
+        sandbox = ''
 
     url = 'https://{}services.ilevelsolutions.com/DataService/Service/{}/{}/DataService.svc'.format(
         sandbox, wsdl_year, wsdl_quarter)
-    LOGGER.info('init: url is ' + url)
+    LOGGER.info('init: url is %s', url)
     wsdl_url = url + '?singleWsdl'
     plugin = SoapFixer()
     client = Client(wsdl_url, plugins=[plugin])
@@ -99,7 +100,7 @@ def main():
     #
     endpoint_url = url + '/Soap11NoWSA'
     client.set_options(
-        port='CustomBinding_IDataService2',  # TODO: determine if we should use version 3
+        port='CustomBinding_IDataService2',
         location=endpoint_url,
         wsse=security)
 
@@ -109,8 +110,7 @@ def main():
         sync(client=client,
              config=parsed_args.config,
              catalog=parsed_args.catalog,
-             state=state,
-             base_url=url)
+             state=state)
 
 
 if __name__ == '__main__':

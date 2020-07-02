@@ -8,7 +8,6 @@
 class IGetFormula:
 
     def __init__(self):
-        Value = None
         DataItemId = None
         PeriodEnd = None
         ReportedDate = None
@@ -18,17 +17,18 @@ class IGetFormula:
         StandardizedDataId = None
         ValueNumeric = None
         ValueString = None
-        FormulaTypeIDsString = None
-        PeriodIsOffset = None
-        PeriodQuantity = None
-        PeriodType = None
+        FormulaTypeIDsString = 'None'
+        PeriodIsOffset = False
+        PeriodQuantity = 0
+        PeriodType = ''
 
         ReportDateIsFiscal = None
         ReportDatePeriodsQuantity = None
         ReportDateType = None
         ReportedDateValue = None
 
-        EndOfPeriodIsFiscal = None
-        EndOfPeriodPeriodsQuantity = None
-        EndOfPeriodType = None
-        EndOfPeriodValue = None
+        EndOfPeriodIsFiscal = False
+        EndOfPeriodPeriodsQuantity = 0
+        EndOfPeriodType = ''
+        EndOfPeriodValue = ''
+        RawValue = ''

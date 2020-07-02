@@ -5,6 +5,12 @@
     "id": {
       "type": ["null","integer"]
     },
+    "asset_id": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
     "object_type_id": {
       "type": ["null","string"]
     },

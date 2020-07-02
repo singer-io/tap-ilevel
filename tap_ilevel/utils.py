@@ -18,6 +18,11 @@ def get_date_chunks(start_date, end_date, max_days):
     td = timedelta(days=max_days)
     result = []
 
+    #TODO: remove
+    print(type(start_date))
+    if isinstance(start_date, str):
+        start_date = datetime.strptime(start_date, '%Y-%m-%d')
+
     days_dif = get_num_days_diff(start_date, end_date)
     if days_dif < max_days:
         result.append(start_date)

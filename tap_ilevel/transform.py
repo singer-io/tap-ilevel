@@ -1,27 +1,19 @@
 import re
-import pytz
-from singer.utils import strptime_to_utc, strftime
-from datetime import timezone, datetime, timedelta
-from singer.utils import strptime_to_utc, strftime
-from pytz import timezone
-import pytz
-import time
-from .iget_formula import IGetFormula
-from .utils import est_to_utc_datetime
-from .constants import ENTITY_DATE_FIELDS
-import dateutil.parser
+from datetime import datetime
 import singer
-
+from singer.utils import strftime
+import pytz
+import dateutil.parser
+from .iget_formula import IGetFormula
 LOGGER = singer.get_logger()
 
-# Convert camelCase to snake_case
 def convert(name):
+    """ Convert camelCase to snake_case. """
     regsub = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
     return re.sub('([a-z0-9])([A-Z])', r'\1_\2', regsub).lower()
 
-
-# Convert keys in json array
 def convert_array(arr):
+    """ Convert keys in json array """
     new_arr = []
     for i in arr:
         if isinstance(i, list):
@@ -32,9 +24,8 @@ def convert_array(arr):
             new_arr.append(i)
     return new_arr
 
-
-# Convert keys in json
 def convert_json(this_json):
+    """ Convert keys in json """
     out = {}
     for key in this_json:
         new_key = convert(key)
@@ -49,40 +40,13 @@ def convert_json(this_json):
 def __est_to_utc_datetime(date_val):
     """Date object returned from API call needs to be converted to format required by SingerIO."""
     date_str = date_val.strftime("%Y-%m-%d %H:%M:%S")
-    timezone = pytz.timezone('US/Eastern')
-    est_datetime = timezone.localize(datetime.strptime(
+    t_z = pytz.timezone('US/Eastern')
+    est_datetime = t_z.localize(datetime.strptime(
         date_str, "%Y-%m-%d %H:%M:%S"))
-    utc_datetime = strftime(timezone.normalize(est_datetime).astimezone(
+    utc_datetime = strftime(t_z.normalize(est_datetime).astimezone(
         pytz.utc))
     return utc_datetime
 
-"""
-def est_to_utc_datetime(data_dict, data_key, datetime_fields):
-    timezone = pytz.timezone('US/Eastern')
-    new_dict = data_dict
-    if datetime_fields:
-        i = 0
-        for record in data_dict[data_key]:
-            for datetime_field in datetime_fields:
-                est_datetime_val = record.get(datetime_field)
-                if est_datetime_val:
-                    if est_datetime_val == '0000-00-00 00:00:00':
-                        utc_datetime = None
-                    else:
-                        try:
-                            est_datetime = timezone.localize(datetime.datetime.strptime(
-                                est_datetime_val, "%Y-%m-%d %H:%M:%S"))
-                            utc_datetime = strftime(timezone.normalize(est_datetime).astimezone(
-                                pytz.utc))
-                        except ValueError as err:
-                            LOGGER.warning('Value Error: {}'.format(err))
-                            LOGGER.warning('Invalid Date: {}'.format(est_datetime_val))
-                            LOGGER.warning('record: {}'.format(record))
-                            utc_datetime = None
-                    new_dict[data_key][i][datetime_field] = utc_datetime
-            i = i + 1
-    return new_dict
-"""
 def remove_custom_nodes(this_json):
     if not isinstance(this_json, (dict, list)):
         return this_json
@@ -92,9 +56,8 @@ def remove_custom_nodes(this_json):
         if not kk[:1] == '_'}
 
 
-# Convert custom fields and sets
-# Generalize/Abstract custom fields to key/value pairs
 def convert_custom_fields(this_json):
+    """ Convert custom fields and sets Generalize/Abstract custom fields to key/value pairs """
     new_json = this_json
     i = 0
     for record in this_json:
@@ -117,16 +80,16 @@ def convert_custom_fields(this_json):
     return new_json
 
 
-# Run all transforms: denests _embedded, removes _embedded/_links, and
-#  converst camelCase to snake_case for fieldname keys.
+
 def transform_json(this_json):
+    """ Run all transforms: denests _embedded, removes _embedded/_links, and convert camelCase to
+    snake_case for fieldname keys. """
     transformed_json = convert_json(this_json)
     return transformed_json
 
-"""
-    Convert an object to a dictionary object, dates are converted as required.
-"""
+
 def obj_to_dict(obj):
+    """ Convert an object to a dictionary object, dates are converted as required. """
     if not  hasattr(obj, "__dict__"):
         return obj
     result = {}
@@ -141,32 +104,27 @@ def obj_to_dict(obj):
             element = obj_to_dict(val)
         result[key] = element
 
-        """
-        if key in ENTITY_DATE_FIELDS:
-            old_date = result[key]
-            utc_date = est_to_utc_datetime(old_date)
-            result[key] = utc_date
-         """
-        """
-        if isinstance(result[key], (datetime, date)):
-            old_date = result[key]
-            utc_date = est_to_utc_datetime(old_date)
-            result[key] = utc_date"""
-
     return result
 
 def convert_ipush_event_to_obj(event):
-    """Given an object returned from the SOAP API, convert into simplified object intended for publishing to Singer."""
+    """Given an object returned from the SOAP API, convert into simplified object intended for
+    publishing to Singer."""
     result = IGetFormula()
 
-    if isinstance(event.Value, datetime):
-        result.ValueString = convert_iso_8601_date(event.Value)
-    elif isinstance(event.Value, int) or isinstance(event.Value, float):
-        result.ValueNumeric = str(event.Value)
+    if event.Value is None:
+        result.RawValue = "None"
     else:
-        result.ValueString = event.Value
+        result.RawValue = event.Value
+    if isinstance(event.Value, (float, int)):
+        result.ValueNumeric = event.Value
+    else:
+        result.ValueString = str(event.Value)
 
     result.DataItemId = event.SDParameters.DataItemId
+
+    if event.SDParameters.StandardizedDataId == 294814:
+        LOGGER.info('hit: standardized data id: 294814 ',)
+
     result.ScenarioId = event.SDParameters.ScenarioId
     result.DataValueType = event.SDParameters.DataValueType
     result.StandardizedDataId = event.SDParameters.StandardizedDataId
@@ -193,14 +151,11 @@ def convert_ipush_event_to_obj(event):
 
     return result
 
-#def
-
 def convert_iso_8601_date(date_str):
-
+    """Convert ISO 8601 formatted date string into time zone unaware"""
     if isinstance(date_str, datetime):
         date_str = date_str.strftime("%Y-%m-%d")
 
-    """Convert ISO 8601 formatted date string into time zone nieve"""
     cur_date_ref = dateutil.parser.parse(date_str)
     cur_date_ref = cur_date_ref.replace(tzinfo=None)
     return cur_date_ref
@@ -208,10 +163,11 @@ def convert_iso_8601_date(date_str):
 def copy_i_get_result(source):
     result = IGetFormula()
 
-    if hasattr(source, 'ValueString'):
-        result.ValueString = source.ValueString
+    result.RawValue = str(source.RawValue)
 
-    if hasattr(source, 'ValueNumeric'):
+    if hasattr(source, "ValueString"):
+        result.ValueString = source.ValueString
+    else:
         result.ValueNumeric = source.ValueNumeric
 
     result.DataItemId = source.DataItemId
@@ -239,3 +195,46 @@ def copy_i_get_result(source):
     result.EndOfPeriodValue = source.EndOfPeriodValue
 
     return result
+
+def split_data_items(source):
+    """References to assets stored in the the Data item entity as an array. This method will return
+    a series of records, one per item in the array of asset refs; Basically we build a duplicate
+    record per asset ref."""
+
+    results = []
+
+    if 'asset_i_ds_string' not in source:
+        results.append(source)
+        return results
+
+    asset_ids = source['asset_i_ds_string'].split(",")
+    if len(asset_ids) > 1:
+        for asset_id in asset_ids:
+            results.append(clone_data_item(source, asset_id))
+    else:
+        source['asset_id'] = int(source['asset_i_ds_string'])
+        results.append(source)
+
+    return results
+
+def clone_data_item(source, asset_id):
+    copy = {}
+    copy['asset_id'] = int(asset_id)
+
+    set_attr('conversion_type_id', source, copy)
+    set_attr('data_value_type', source, copy)
+    set_attr('enabled_capabilities_string', source, copy)
+    set_attr('excel_name', source, copy)
+    set_attr('id', source, copy)
+    set_attr('is_monetary', source, copy)
+    set_attr('is_putable', source, copy)
+    set_attr('is_soft_deleted', source, copy)
+    set_attr('name', source, copy)
+    set_attr('object_type_id', source, copy)
+    set_attr('scenario_i_ds_string', source, copy)
+
+    return copy
+
+def set_attr(attr_name, source, target):
+    if attr_name in source:
+        target[attr_name] = source[attr_name]
