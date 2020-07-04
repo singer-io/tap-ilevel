@@ -2,71 +2,235 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "string_field": {
-      "type": ["null", "string"]
+    "amount": { 
+      "type": ["null", "number"]
     },
-    "boolean_field": {
-      "type": ["null", "boolean"]
+    "as_of": {
+         "type": ["null", "string"],
+          "format": "date-time"
     },
-    "integer_field": {
-      "type": ["null", "integer"]
+    "client": {
+        "type": ["null", "object"],
+        "additionalProperties": false,
+        "properties": {
+            "id":{
+                "type": ["null", "integer"]
+              },
+              "name":{
+                  "type": ["null", "string"]
+              }
+        }
     },
-    "datetime_field": {
-      "type": ["null", "string"],
-      "format": "date-time"
+    "cost_per_share": {
+       "anyOf": [
+            {
+                "type": "null"
+            },
+            {
+                "type": "number",
+                "multipleOf": 1e-8
+            }
+          ]
     },
-    "flexible_nested_object": {
-      "type": ["null", "object"],
-      "additionalProperties": true
+    "currency": {
+       "type": ["null", "string"]
     },
-    "nested_object": {
+    "custom1": {
+       "type": ["null", "string"]
+    },
+    "custom2": {
+       "type": ["null", "string"]
+    },
+    "custom3": {
+          "type": ["null", "string"],
+          "format": "date-time"
+    },
+    "custom4": {
+         "type": ["null", "string"],
+          "format": "date-time"
+    },
+    "custom5": {
+       "type": ["null", "string"]
+    },
+    "custom6": {
+       "type": ["null", "string"]
+    },
+    "description": {
+       "type": ["null", "string"]
+    },
+    "group_id": {
+       "type": ["null", "integer"]
+    },
+    "id": {
+       "type": ["null", "integer"]
+    },
+    "internal_id": {
+       "type": ["null", "string"]
+    },
+    "investment": {
+        "type": ["null", "object"],
+        "additionalProperties": false,
+        "properties": {
+            "id":{
+                "type": ["null", "integer"]
+              },
+              "name":{
+                  "type": ["null", "string"]
+              }
+        }
+    },
+    "last_modified": {
+         "type": ["null", "string"],
+          "format": "date-time"
+    },
+    "last_modified_by": {
+        "type": ["null", "object"],
+        "additionalProperties": false,
+        "properties": {
+            "email_address":{
+                "type": ["null", "string"]
+            },
+            "first_name":{
+                "type": ["null", "string"]
+            },
+            "id":{
+                "type": ["null", "integer"]
+            },
+            "last_name":{
+                "type": ["null", "string"]
+            },
+            "middle_name":{
+                "type": ["null", "string"]
+            },
+            "user_name":{
+                "type": ["null", "string"]
+            }
+        }
+    },
+    "local_amount": {
+       "anyOf": [
+            {
+                "type": "null"
+            },
+            {
+                "type": "number",
+                "multipleOf": 1e-8
+            }
+          ]
+    },
+    "local_currency": {
+       "type": ["null", "string"]
+    },
+    "original_id": {
+       "type": ["null", "integer"]
+    },
+    "owner": {
+        "type": ["null", "object"],
+        "additionalProperties": false,
+        "properties": {
+            "id":{
+                "type": ["null", "integer"]
+              },
+              "name":{
+                  "type": ["null", "string"]
+              }
+        }
+    },
+    "scenario": {
+        "type": ["null", "object"],
+        "additionalProperties": false,
+        "properties": {
+            "id":{
+                "type": ["null", "integer"]
+              },
+              "name":{
+                  "type": ["null", "string"]
+              },
+            "excel_name":{
+                  "type": ["null", "string"]
+              }
+        }
+    },
+    "security": {
+        "type": ["null", "object"],
+        "additionalProperties": false,
+        "properties": {
+            "id":{
+                "type": ["null", "integer"]
+              },
+              "name":{
+                  "type": ["null", "string"]
+              }
+        }
+    },
+    "shares": {
+       "anyOf": [
+            {
+                "type": "null"
+            },
+            {
+                "type": "number",
+                "multipleOf": 1e-8
+            }
+          ]
+    },
+    "transaction_category": {
+        "type": ["null", "object"],
+        "additionalProperties": false,
+        "properties": {
+            "id":{
+                "type": ["null", "integer"]
+              },
+              "name":{
+                  "type": ["null", "string"]
+              }
+        }
+    },
+    "transaction_date": {
+         "type": ["null", "string"],
+          "format": "date-time"
+    },
+    "value_per_share": {
+       "anyOf": [
+            {
+                "type": "null"
+            },
+            {
+                "type": "number",
+                "multipleOf": 1e-8
+            }
+          ]
+    },
+    "scenario": {
       "type": ["null", "object"],
       "additionalProperties": false,
       "properties": {
+        "name": {
+          "type": ["null", "string"]
+        },
         "id": {
           "type": ["null", "integer"]
         },
-        "name": {
+        "excel_name": {
           "type": ["null", "string"]
         }
       }
     },
-    "nested_array": {
-      "anyOf": [
-        {
-          "type": "array",
-          "items": {
-            "type": ["null", "object"],
-            "additionalProperties": false,
-            "properties": {
-              "id": {
-                "type": ["null", "integer"]
-              },
-              "name": {
-                "type": ["null", "string"]
-              }
-            }
-          }
-        },
-        {
-          "type": "null"
-        }
-      ]
+    "is_soft_deleted": {
+      "type": ["null", "boolean"],
+      "default": false
     },
-    "single_field_array": {
-      "anyOf": [
-        {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+    "transaction_type": {
+      "type": ["null", "object"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": ["null", "string"]
         },
-        {
-          "type": "null"
+        "id": {
+          "type": ["null", "integer"]
         }
-      ]
-    },
-    
-    "ADD_FIELDS_HERE": ""
+      }
+    }
   }
 }

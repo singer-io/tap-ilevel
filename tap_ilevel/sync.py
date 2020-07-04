@@ -1,369 +1,23 @@
-from datetime import timedelta
+from datetime import datetime
+import json
+from json import JSONEncoder
 import singer
 from singer import metrics, metadata, Transformer, utils
-from singer.utils import strptime_to_utc, strftime
 from tap_ilevel.transform import transform_json
 from tap_ilevel.streams import STREAMS
+import tap_ilevel.singer_operations as singer_ops
+from .transform import obj_to_dict
+from .request_state import RequestState
+from .utils import get_date_chunks
+from .constants import MAX_DATE_WINDOW, OBJECT_TYPE_STREAMS,\
+    RELATION_TYPE_STREAM, INVESTMENT_TRANSACTIONS_STREAM
 
 LOGGER = singer.get_logger()
 
-def write_schema(catalog, stream_name):
-    stream = catalog.get_stream(stream_name)
-    schema = stream.schema.to_dict()
-    try:
-        singer.write_schema(stream_name, schema, stream.key_properties)
-    except OSError as err:
-        LOGGER.info('OS Error writing schema for: {}'.format(stream_name))
-        raise err
-
-
-def write_record(stream_name, record, time_extracted):
-    try:
-        singer.messages.write_record(stream_name, record, time_extracted=time_extracted)
-    except OSError as err:
-        LOGGER.info('OS Error writing record for: {}'.format(stream_name))
-        LOGGER.info('record: {}'.format(record))
-        raise err
-    except TypeError as err:
-        LOGGER.info('Type Error writing record for: {}'.format(stream_name))
-        LOGGER.info('record: {}'.format(record))
-        raise err
-
-
-def get_bookmark(state, stream, default):
-    if (state is None) or ('bookmarks' not in state):
-        return default
-    return (
-        state
-        .get('bookmarks', {})
-        .get(stream, default)
-    )
-
-
-def write_bookmark(state, stream, value):
-    if 'bookmarks' not in state:
-        state['bookmarks'] = {}
-    state['bookmarks'][stream] = value
-    LOGGER.info('Write state for stream: {}, value: {}'.format(stream, value))
-    singer.write_state(state)
-
-
-def transform_datetime(this_dttm):
-    with Transformer() as transformer:
-        new_dttm = transformer._transform_datetime(this_dttm)
-    return new_dttm
-
-
-def process_records(catalog, #pylint: disable=too-many-branches
-                    stream_name,
-                    records,
-                    time_extracted,
-                    bookmark_field=None,
-                    bookmark_type=None,
-                    max_bookmark_value=None,
-                    last_datetime=None,
-                    last_integer=None,
-                    parent=None,
-                    parent_id=None):
-    stream = catalog.get_stream(stream_name)
-    schema = stream.schema.to_dict()
-    stream_metadata = metadata.to_map(stream.metadata)
-
-    with metrics.record_counter(stream_name) as counter:
-        for record in records:
-            # If child object, add parent_id to record
-            if parent_id and parent:
-                record[parent + '_id'] = parent_id
-
-            # Transform record for Singer.io
-            with Transformer() as transformer:
-                transformed_record = transformer.transform(
-                    record,
-                    schema,
-                    stream_metadata)
-
-                # Reset max_bookmark_value to new value if higher
-                if transformed_record.get(bookmark_field):
-                    if max_bookmark_value is None or \
-                        transformed_record[bookmark_field] > transform_datetime(max_bookmark_value):
-                        max_bookmark_value = transformed_record[bookmark_field]
-
-                if bookmark_field and (bookmark_field in transformed_record):
-                    if bookmark_type == 'integer':
-                        # Keep only records whose bookmark is after the last_integer
-                        if transformed_record[bookmark_field] >= last_integer:
-                            write_record(stream_name, transformed_record, \
-                                time_extracted=time_extracted)
-                            counter.increment()
-                    elif bookmark_type == 'datetime':
-                        last_dttm = transform_datetime(last_datetime)
-                        bookmark_dttm = transform_datetime(transformed_record[bookmark_field])
-                        # Keep only records whose bookmark is after the last_datetime
-                        if bookmark_dttm:
-                            if bookmark_dttm >= last_dttm:
-                                write_record(stream_name, transformed_record, \
-                                    time_extracted=time_extracted)
-                                counter.increment()
-                else:
-                    write_record(stream_name, transformed_record, time_extracted=time_extracted)
-                    counter.increment()
-
-        return max_bookmark_value, counter.value
-
-
-# Sync a specific parent or child endpoint.
-def sync_endpoint(client,
-                  catalog,
-                  state,
-                  start_date,
-                  stream_name,
-                  path,
-                  endpoint_config,
-                  static_params,
-                  bookmark_query_field=None,
-                  bookmark_field=None,
-                  bookmark_type=None,
-                  data_key=None,
-                  id_fields=None,
-                  selected_streams=None,
-                  parent=None,
-                  parent_id=None):
-
-
-    # Get the latest bookmark for the stream and set the last_integer/datetime
-    last_datetime = None
-    last_integer = None
-    max_bookmark_value = None
-
-    if bookmark_type == 'integer':
-        last_integer = get_bookmark(state, stream_name, 0)
-        max_bookmark_value = last_integer
-    else:
-        last_datetime = get_bookmark(state, stream_name, start_date)
-        max_bookmark_value = last_datetime
-
-    end_dttm = utils.now()
-    end_dt = end_dttm.date()
-    start_dttm = end_dttm
-    start_dt = end_dt
-
-    if bookmark_query_field:
-        if bookmark_type == 'datetime':
-            start_dttm = strptime_to_utc(last_datetime)
-            start_dt = start_dttm.date()
-            start_dt_str = strftime(start_dttm)[0:10]
-    # date_list provides one date for each date in range
-    # Most endpoints, witout a bookmark query field, will have a single date (today)
-    # Clicks endpoint will have a date for each day from bookmark to today
-    date_list = [str(start_dt + timedelta(days=x)) for x in range((end_dt - start_dt).days + 1)]
-    endpoint_total = 0
-    total_records = 0
-    limit = 1000 # PageSize (default for API is 100)
-    for bookmark_date in date_list:
-        page = 1
-        offset = 0
-        total_records = 0
-        if stream_name == 'clicks':
-            LOGGER.info('Stream: {}, Syncing bookmark_date = {}'.format(
-                stream_name, bookmark_date))
-        next_url = '{}/{}.json'.format(client.base_url, path)
-        while next_url:
-            # Squash params to query-string params
-            params = {
-                "PageSize": limit,
-                **static_params # adds in endpoint specific, sort, filter params
-            }
-
-            if bookmark_query_field:
-                if bookmark_type == 'datetime':
-                    params[bookmark_query_field] = bookmark_date
-                elif bookmark_type == 'integer':
-                    params[bookmark_query_field] = last_integer
-
-            if page == 1 and not params == {}:
-                param_string = '&'.join(['%s=%s' % (key, value) for (key, value) in params.items()])
-                querystring = param_string.replace('<parent_id>', str(parent_id)).replace(
-                    '<last_datetime>', strptime_to_utc(last_datetime).strftime('%Y-%m-%dT%H:%M:%SZ'))
-            else:
-                querystring = None
-            LOGGER.info('URL for Stream {}: {}{}'.format(
-                stream_name,
-                next_url,
-                '?{}'.format(querystring) if querystring else ''))
-
-            # API request data
-            data = {}
-            data = client.get(
-                url=next_url,
-                path=path,
-                params=querystring,
-                endpoint=stream_name)
-
-            # time_extracted: datetime when the data was extracted from the API
-            time_extracted = utils.now()
-            if not data or data is None or data == {}:
-                total_records = 0
-                break # No data results
-
-            # Get pagination details
-            api_total = int(data.get('@total', '0'))
-            page_size = int(data.get('@pagesize', '0'))
-            if page_size:
-                if page_size > limit:
-                    limit = page_size
-            next_page_uri = data.get('@nextpageuri', None)
-            if next_page_uri:
-                next_url = '{}{}'.format(BASE_URL, next_page_uri)
-            else:
-                next_url = None
-
-            # Break out of loop if only paginations details data (no records)
-            #   or no data_key in data
-            #  company_information and report_metadata do not have pagination details
-            if not stream_name in ('company_information', 'report_metadata'):
-                # catalog_items has bug where api_total is always 0
-                if (not stream_name == 'catalog_items') and (api_total == 0) and (not next_url):
-                    break
-                if not data_key in data:
-                    break
-
-            # Transform data with transform_json from transform.py
-            # The data_key identifies the array/list of records below the <root> element
-            # LOGGER.info('data = {}'.format(data)) # TESTING, comment out
-            transformed_data = [] # initialize the record list
-            data_list = []
-            data_dict = {}
-            if isinstance(data, list) and not data_key in data:
-                data_list = data
-                data_dict[data_key] = data_list
-                transformed_data = transform_json(data_dict, stream_name, data_key)
-            elif isinstance(data, dict) and not data_key in data:
-                data_list.append(data)
-                data_dict[data_key] = data_list
-                transformed_data = transform_json(data_dict, stream_name, data_key)
-            else:
-                transformed_data = transform_json(data, stream_name, data_key)
-
-            # LOGGER.info('transformed_data = {}'.format(transformed_data)) # TESTING, comment out
-            if not transformed_data or transformed_data is None:
-                LOGGER.info('No transformed data for data = {}'.format(data))
-                total_records = 0
-                break # No data results
-
-            # Verify key id_fields are present
-            for record in transformed_data:
-                for key in id_fields:
-                    if not record.get(key):
-                        LOGGER.info('Stream: {}, Missing key {} in record: {}'.format(
-                            stream_name, key, record))
-                        raise RuntimeError
-
-            # Process records and get the max_bookmark_value and record_count for the set of records
-            max_bookmark_value, record_count = process_records(
-                catalog=catalog,
-                stream_name=stream_name,
-                records=transformed_data,
-                time_extracted=time_extracted,
-                bookmark_field=bookmark_field,
-                bookmark_type=bookmark_type,
-                max_bookmark_value=max_bookmark_value,
-                last_datetime=last_datetime,
-                last_integer=last_integer,
-                parent=parent,
-                parent_id=parent_id)
-            LOGGER.info('Stream {}, batch processed {} records'.format(
-                stream_name, record_count))
-
-            # Loop thru parent batch records for each children objects (if should stream)
-            children = endpoint_config.get('children')
-            if children:
-                for child_stream_name, child_endpoint_config in children.items():
-                    if child_stream_name in selected_streams:
-                        write_schema(catalog, child_stream_name)
-                        # For each parent record
-                        for record in transformed_data:
-                            i = 0
-                            # Set parent_id
-                            for id_field in id_fields:
-                                if i == 0:
-                                    parent_id_field = id_field
-                                if id_field == 'id':
-                                    parent_id_field = id_field
-                                i = i + 1
-                            parent_id = record.get(parent_id_field)
-
-                            # sync_endpoint for child
-                            LOGGER.info(
-                                'START Sync for Stream: {}, parent_stream: {}, parent_id: {}'\
-                                    .format(child_stream_name, stream_name, parent_id))
-                            child_path = child_endpoint_config.get(
-                                'path', child_stream_name).format(str(parent_id))
-                            child_bookmark_field = next(iter(child_endpoint_config.get(
-                                'replication_keys', [])), None)
-                            child_total_records = sync_endpoint(
-                                client=client,
-                                catalog=catalog,
-                                state=state,
-                                start_date=start_date,
-                                stream_name=child_stream_name,
-                                path=child_path,
-                                endpoint_config=child_endpoint_config,
-                                static_params=child_endpoint_config.get('params', {}),
-                                bookmark_query_field=child_endpoint_config.get(
-                                    'bookmark_query_field'),
-                                bookmark_field=child_bookmark_field,
-                                bookmark_type=child_endpoint_config.get('bookmark_type'),
-                                data_key=child_endpoint_config.get('data_key', 'results'),
-                                id_fields=child_endpoint_config.get('key_properties'),
-                                selected_streams=selected_streams,
-                                parent=child_endpoint_config.get('parent'),
-                                parent_id=parent_id)
-                            LOGGER.info(
-                                'FINISHED Sync for Stream: {}, parent_id: {}, total_records: {}'\
-                                    .format(child_stream_name, parent_id, child_total_records))
-
-            # Update the state with the max_bookmark_value for the stream
-            if bookmark_field:
-                write_bookmark(state, stream_name, max_bookmark_value)
-
-            # Adjust total_records w/ record_count, if needed
-            if record_count > total_records:
-                total_records = total_records + record_count
-            else:
-                total_records = api_total
-
-            # to_rec: to record; ending record for the batch page
-            to_rec = offset + limit
-            if to_rec > total_records:
-                to_rec = total_records
-
-            LOGGER.info('Synced Stream: {}, page: {}, {} to {} of total records: {}'.format(
-                stream_name,
-                page,
-                offset,
-                to_rec,
-                total_records))
-            # Pagination: increment the offset by the limit (batch-size) and page
-            offset = offset + limit
-            page = page + 1
-        endpoint_total = endpoint_total + total_records
-    # Return total_records (for all pages)
-    return endpoint_total
-
-
-# Currently syncing sets the stream currently being delivered in the state.
-# If the integration is interrupted, this state property is used to identify
-#  the starting point to continue from.
-# Reference: https://github.com/singer-io/singer-python/blob/master/singer/bookmarks.py#L41-L46
-def update_currently_syncing(state, stream_name):
-    if (stream_name is None) and ('currently_syncing' in state):
-        del state['currently_syncing']
-    else:
-        singer.set_currently_syncing(state, stream_name)
-    singer.write_state(state)
-
-
 def sync(client, config, catalog, state):
+    """ Main routine: orchestrates pulling data for selected streams. """
+
+    # Start date may be overridden by command line params
     if 'start_date' in config:
         start_date = config['start_date']
 
@@ -372,8 +26,11 @@ def sync(client, config, catalog, state):
     last_stream = singer.get_currently_syncing(state)
     LOGGER.info('last/currently syncing stream: {}'.format(last_stream))
     selected_streams = []
+    selected_streams_by_name = {}
     for stream in catalog.get_selected_streams(state):
         selected_streams.append(stream.stream)
+        selected_streams_by_name[stream.stream] = stream
+
     LOGGER.info('selected_streams: {}'.format(selected_streams))
 
     if not selected_streams or selected_streams == []:
@@ -383,27 +40,311 @@ def sync(client, config, catalog, state):
     for stream_name, endpoint_config in STREAMS.items():
         if stream_name in selected_streams:
             LOGGER.info('START Syncing: {}'.format(stream_name))
-            update_currently_syncing(state, stream_name)
+            stream = selected_streams_by_name[stream_name]
+
             path = endpoint_config.get('path', stream_name)
             bookmark_field = next(iter(endpoint_config.get('replication_keys', [])), None)
-            write_schema(catalog, stream_name)
-            total_records = sync_endpoint(
-                client=client,
-                catalog=catalog,
-                state=state,
-                start_date=start_date,
-                stream_name=stream_name,
-                path=path,
-                endpoint_config=endpoint_config,
-                static_params=endpoint_config.get('params', {}),
-                bookmark_query_field=endpoint_config.get('bookmark_query_field'),
-                bookmark_field=bookmark_field,
-                bookmark_type=endpoint_config.get('bookmark_type'),
-                data_key=endpoint_config.get('data_key', 'results'),
-                id_fields=endpoint_config.get('key_properties'),
-                selected_streams=selected_streams)
+            bookmark_type = endpoint_config.get('bookmark_type')
+            singer_ops.write_schema(catalog, stream_name)
+            total_records = 0
+            data_key = endpoint_config.get('data_key')
+            start_dt = singer_ops.get_start_date(stream_name, bookmark_type, state,
+                                                 start_date)
 
-            update_currently_syncing(state, None)
+            #Request is made using currrent ddate + 1 as the end period.
+            req_state = __get_request_state(client, stream_name, data_key, start_dt,
+                                            datetime.now(), state,
+                                            bookmark_field, stream, path,
+                                            catalog)
+
+            # Main sync routine
+            total_records = __sync_endpoint(req_state)
+
+
             LOGGER.info('FINISHED Syncing: {}, total_records: {}'.format(
                 stream_name,
                 total_records))
+
+    LOGGER.info('sync.py: sync complete')
+
+def __sync_endpoint(req_state):
+    """ Sync a specific endpoint (stream). """
+    # Top level variables
+    endpoint_total = 0
+
+    with metrics.job_timer('endpoint_duration'):
+
+        LOGGER.info('syncing stream : %s', req_state.stream_name)
+        singer_ops.update_currently_syncing(req_state.state, req_state.stream_name)
+
+        # Publish schema to singer
+        singer_ops.write_schema(req_state.catalog, req_state.stream_name)
+        LOGGER.info('Processing date window for stream %s, %s to %s', req_state.stream_name,
+                    req_state.start_dt, req_state.end_dt)
+
+        if(req_state.stream_name in OBJECT_TYPE_STREAMS or req_state.stream_name in
+           RELATION_TYPE_STREAM) or req_state.stream_name in INVESTMENT_TRANSACTIONS_STREAM:
+            #Certain stream types follow a common processing pattern
+            endpoint_total = __process_object_stream(req_state)
+        else:
+            endpoint_total = __process_standardized_data_stream(req_state)
+
+        singer_ops.update_currently_syncing(req_state.state, None)
+        LOGGER.info('FINISHED Syncing: %s, total_records: %s', req_state.stream_name,
+                    endpoint_total)
+
+    LOGGER.info('sync.py: sync complete')
+
+    return endpoint_total
+
+def __get_request_state(client, stream_name, data_key, start_dt, end_dt, state, bookmark_field,
+                        stream, path, catalog):
+    """Given a series of common parameters, combine them into a data structure to minimize
+    complexity of passing frequently used data as method parameters."""
+    req_state = RequestState()
+    req_state.client = client
+    req_state.stream_name = stream_name
+    req_state.data_key = data_key
+    req_state.start_dt = start_dt
+
+    end_dt = end_dt.strftime("%Y %m, %d")
+    end_dt = datetime.strptime(end_dt, "%Y %m, %d")
+
+    req_state.end_dt = end_dt
+    req_state.state = state
+    req_state.bookmark_field = bookmark_field
+    req_state.stream = stream
+    req_state.path = path
+    req_state.catalog = catalog
+    return req_state
+
+def __chunk_results_of_get_updated_data_call():
+    """When call is performed to translate recently modified records into standardized ids, further
+    processing is required to isolate resulting standardized data ids as 20k limited sets in order
+    for next call."""
+
+def __process_object_stream(req_state):
+    """Top level handler for processing default method of updating data."""
+    record_count = 0
+    date_chunks = get_date_chunks(req_state.start_dt, req_state.end_dt, MAX_DATE_WINDOW)
+
+    cur_start_date = None
+    cur_end_date = None
+    cur_date_criteria_length = len(date_chunks)
+    cur_date_range_index = 0
+
+    # Loop through date, and id 'chunks' as appropriate, processing each window.
+    while cur_date_range_index < cur_date_criteria_length:
+        if cur_start_date is None:
+            cur_start_date = date_chunks[0]
+            cur_end_date = date_chunks[1]
+            cur_date_range_index = 2
+        else:
+            cur_start_date = cur_end_date
+            cur_end_date = date_chunks[cur_date_range_index]
+            cur_date_range_index = cur_date_range_index + 1
+
+        LOGGER.info('Processing date range %s of %s total (%s - %s) for stream %s',
+                    cur_date_range_index,
+                    cur_date_criteria_length, cur_start_date, cur_end_date, req_state.stream_name)
+
+        #Retrieve updated entities for given date range, and send for processing
+        updated_object_id_sets = singer_ops.get_updated_object_id_sets(cur_start_date,
+                                                                       cur_end_date,
+                                                                       req_state.client,
+                                                                       req_state.stream_name)
+
+        if len(updated_object_id_sets) > 0:
+            cur_id_set_index = 0
+            for id_set in updated_object_id_sets:
+                LOGGER.info('Processing id set %s of %s total sets', cur_id_set_index,
+                            len(updated_object_id_sets))
+                record_count = record_count + __process_updated_object_stream_id_set(id_set,
+                                                                                     req_state)
+
+
+        #Retrieve deleted entities for given date range, and send for processing
+        deleted_object_id_sets = singer_ops.get_deleted_object_id_sets(cur_start_date,
+                                                                       cur_end_date,
+                                                                       req_state.client,
+                                                                       req_state.stream_name)
+        if len(deleted_object_id_sets) > 0:
+            cur_id_set_index = 0
+            for id_set in deleted_object_id_sets:
+                LOGGER.info('Processing id set %s of %s total sets', cur_id_set_index,
+                            len(updated_object_id_sets))
+                record_count = record_count + __process_deleted_object_stream_id_set(id_set,
+                                                                                     req_state)
+
+                cur_id_set_index = cur_id_set_index + 1
+
+        singer_ops.write_bookmark(req_state.state, req_state.stream_name, cur_end_date)
+
+    return record_count
+
+def __process_updated_object_stream_id_set(object_ids, req_state):
+    update_count = 0
+
+    if req_state.stream_name in OBJECT_TYPE_STREAMS:
+        records = singer_ops.get_object_details_by_ids(object_ids, req_state.stream_name,
+                                                       req_state.client)
+    elif req_state.stream_name in RELATION_TYPE_STREAM:
+        records = singer_ops.get_object_relation_details_by_ids(object_ids, req_state.client)
+    else:
+        records = singer_ops.get_investment_transaction_details_by_ids(object_ids,
+                                                                       req_state.client)
+    if len(records) == 0:
+        return 0
+
+    update_count = update_count + process_records(records, req_state)
+    return update_count
+
+def __process_deleted_object_stream_id_set(object_ids, req_state):
+    update_count = 0
+
+    if req_state.stream_name in OBJECT_TYPE_STREAMS:
+        records = singer_ops.get_object_details_by_ids(object_ids, req_state.stream_name,
+                                                       req_state.client)
+    elif req_state.stream_name in RELATION_TYPE_STREAM:
+        records = singer_ops.get_object_relation_details_by_ids(object_ids, req_state.client)
+    else:
+        records = singer_ops.get_investment_transaction_details_by_ids(object_ids,
+                                                                       req_state.client)
+    if len(records) == 0:
+        return 0
+
+    update_count = update_count + process_records(records, req_state, True)
+    return update_count
+
+def __set_deletion_flag(entity, is_soft_deleted=False):
+    """Set new attribute into entity used to track soft deletion status."""
+    if is_soft_deleted is None:
+        is_soft_deleted = False
+    entity['is_soft_deleted'] = is_soft_deleted
+
+def process_records(records, req_state, deletion_flag=None):
+    """Handle low level operations to publish records."""
+    update_count = 0
+
+    for record in records:
+        try:
+            transformed_record = __transform_record(record, req_state.stream)
+            __set_deletion_flag(transformed_record, deletion_flag)
+            singer_ops.write_record(req_state.stream_name, transformed_record, utils.now())
+            update_count = update_count + 1
+        except Exception as err: # pylint: disable=broad-except
+            err_msg = 'Error during transformation for entity: {}, for type: {}, obj: {}'\
+                .format(err, req_state.stream_name, transformed_record)
+            LOGGER.error(err_msg)
+
+    LOGGER.info('process_object_set: total record count is %s ', update_count)
+    return update_count
+
+
+def __transform_record(record, stream):
+    """ Make data more 'database compliant', i.e. rename columns, convert to UTC timezones, etc.
+     'transform_data' method needs to ensure raw data matches that in the schemas. """
+    obj_dict = obj_to_dict(record) #Convert SOAP object to dict
+    object_json_str = json.dumps(obj_dict, indent=4, cls=DateTimeEncoder)
+    object_json_str = object_json_str.replace('True', 'true')
+    object_json = json.loads(object_json_str) #Parse JSON
+
+    stream_metadata = metadata.to_map(stream.metadata)
+    transformed_data = transform_json(object_json)
+
+    # singer validation check
+    with Transformer() as transformer:
+        transformed_record = transformer.transform(
+            transformed_data,
+            stream.schema.to_dict(),
+            stream_metadata)
+
+    return transformed_record
+
+class DateTimeEncoder(JSONEncoder):
+
+    def default(self, obj): # pylint: disable=arguments-differ, method-hidden
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return obj
+
+def __process_standardized_data_stream(req_state):
+    """Retrieve periodic data. API docs under 'Migrating iLEVEL Data Changes (Deltas) to a Data
+    Warehouse' (pp 67). Whereas other streams attempt to reflect updates to entities (Assets,
+    Funds, InvestmentTransactions) operations for certain attributes will not be reflected in the
+    API calls used to report updates. This call will reflect all attribute updates for the specified
+    timeframe. Additionally, this call will reflect the state of an attribute at a given point in
+    time (period)."""
+    update_count = 0
+
+    #Split date windows: API call restricts date windows based on 30 day periods.
+    date_chunks = get_date_chunks(req_state.start_dt, req_state.end_dt, MAX_DATE_WINDOW)
+
+    cur_start_date = None
+    cur_end_date = None
+    cur_date_criteria_length = len(date_chunks)
+    cur_date_range_index = 0
+    LOGGER.info('Preparing to process %s date chunks', len(date_chunks))
+    date_chunk_index = 0
+    while cur_date_range_index < cur_date_criteria_length:
+
+        if cur_start_date is None:
+            cur_start_date = date_chunks[0]
+            cur_end_date = date_chunks[1]
+            cur_date_range_index = 2
+        else:
+            cur_start_date = cur_end_date
+            cur_end_date = date_chunks[cur_date_range_index]
+            cur_date_range_index = cur_date_range_index + 1
+
+        LOGGER.info('Processing date range %s of %s total %s - %s for stream: %s',
+                    cur_date_range_index, cur_date_criteria_length, cur_start_date,
+                    cur_end_date, req_state.stream_name)
+
+
+
+        #Get updated records based on date range
+        updated_object_id_sets = singer_ops.get_standardized_data_id_chunks(cur_start_date,
+                                                                            cur_end_date,
+                                                                            req_state.client)
+        if len(updated_object_id_sets) == 0:
+            continue
+
+        LOGGER.info('Total number of updated sets is %s', len(updated_object_id_sets))
+
+        #Translate standardized ids to objects
+        for id_set in updated_object_id_sets:
+            LOGGER.info('Total number of records in current set %s', len(id_set))
+            update_count = update_count + process_iget_batch_for_standardized_id_set(id_set,
+                                                                                     req_state)
+
+        singer_ops.write_bookmark(req_state.state, req_state.stream_name, cur_end_date)
+        date_chunk_index = date_chunk_index + 1
+
+    return update_count
+
+def process_iget_batch_for_standardized_id_set(std_id_set, req_state):
+    """Given a set of 'stanardized ids', reflecting attributes that have been updated for a given
+    time window, perform any additional API requests (iGetBatch) to retrieve associated data,
+    and publish results."""
+    update_count = 0
+
+    #Retrieve additional details for id criteria.
+    std_data_results = singer_ops.perform_igetbatch_operation_for_standardized_id_set\
+        (std_id_set, req_state)
+
+    LOGGER.info('Preparing to publish a total of %s records', len(std_data_results))
+    # Publish results to Singer.
+    for record in std_data_results:
+        try:
+
+            transformed_record = __transform_record(record, req_state.stream)
+            singer_ops.write_record(req_state.stream_name, transformed_record, utils.now())
+            update_count = update_count + 1
+
+        except Exception as err: # pylint: disable=broad-except
+            err_msg = 'error during transformation for entity (periodic data): {} {} ' \
+                .format(err, transformed_record)
+            LOGGER.error(err_msg)
+
+    return update_count

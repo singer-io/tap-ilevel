@@ -16,58 +16,76 @@ STREAMS = {
     'assets': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
+        'data_key': 'assets',
+        'bookmark_type': 'datetime',
         'replication_keys': ['last_modified_date'],
-        'data_key': 'assets'
-    },
-    'currency_rates': {
-        'key_properties': ['date', 'currency_from', 'currency_to'],
-        'replication_method': 'INCREMENTAL',
-        'replication_keys': ['date'],
-        'data_key': 'currency_rates'
+        'bookmark_type': 'datetime'
     },
     'data_items': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
-        'replication_keys': ['last_modified_date'],
-        'data_key': 'data_items'
+        'bookmark_type': 'datetime'
     },
     'funds': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
-        'replication_keys': ['last_modified_date'],
-        'data_key': 'funds'
+        'data_key': 'funds',
+        'payload_ref': 'NamedEntity',
+        "bookmark_type": "datetime",
+        'replication_keys': ['last_modified_date']
     },
     'investment_transactions': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
-        'replication_keys': ['last_modified_date'],
-        'data_key': 'investment_transactions'
+        'replication_keys': ['last_modified'],
+        'data_key': 'investment_transactions',
+        'bookmark_type': 'datetime'
     },
     'investments': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
         'replication_keys': ['last_modified_date'],
-        'data_key': 'investments'
+        'data_key': 'investments',
+        'bookmark_type': 'datetime'
     },
     'scenarios': {
         'key_properties': ['id'],
-        'replication_method': 'FULL_TABLE',
-        'data_key': 'scenarios'
+        'replication_method': 'INCREMENTAL',
+        'data_key': 'scenarios',
+        'bookmark_type': 'datetime'
     },
     'securities': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
         'replication_keys': ['last_modified_date'],
-        'data_key': 'securities'
+        'data_key': 'securities',
+        'bookmark_type': 'datetime'
     },
-    'segments': {
+    'fund_to_asset_relations': {
         'key_properties': ['id'],
         'replication_method': 'INCREMENTAL',
-        'replication_keys': ['last_modified_date'],
-        'data_key': 'segments'
+        'data_key': 'fund_to_asset_relations',
+        'bookmark_type': 'datetime'
+    },
+    'fund_to_fund_relations': {
+        'key_properties': ['id'],
+        'replication_method': 'INCREMENTAL',
+        'data_key': 'fund_to_fund_relation',
+        'bookmark_type': 'datetime'
+    },
+    'asset_to_asset_relations': {
+        'key_properties': ['id'],
+        'replication_method': 'INCREMENTAL',
+        'data_key': 'asset_to_asset_relations',
+        'bookmark_type': 'datetime'
+    },
+    'periodic_data_standardized': {
+        'key_properties': ['standardized_data_id'],
+        'replication_method': 'INCREMENTAL',
+        'data_key': 'periodic_data_standardized',
+        'bookmark_type': 'datetime'
     }
 }
-
 
 def flatten_streams():
     flat_streams = {}

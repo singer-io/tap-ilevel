@@ -1,72 +1,46 @@
+
 {
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "string_field": {
-      "type": ["null", "string"]
-    },
-    "boolean_field": {
-      "type": ["null", "boolean"]
-    },
-    "integer_field": {
+    "from_id": {
       "type": ["null", "integer"]
     },
-    "datetime_field": {
+    "acquisition_date": {
       "type": ["null", "string"],
       "format": "date-time"
     },
-    "flexible_nested_object": {
-      "type": ["null", "object"],
-      "additionalProperties": true
+    "last_modified_date": {
+      "type": ["null", "string"],
+      "format": "date-time"
     },
-    "nested_object": {
-      "type": ["null", "object"],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": ["null", "integer"]
-        },
-        "name": {
-          "type": ["null", "string"]
-        }
-      }
+    "to_id": {
+      "type": ["null", "integer"]
     },
-    "nested_array": {
-      "anyOf": [
-        {
-          "type": "array",
-          "items": {
-            "type": ["null", "object"],
-            "additionalProperties": false,
-            "properties": {
-              "id": {
-                "type": ["null", "integer"]
-              },
-              "name": {
-                "type": ["null", "string"]
-              }
-            }
-          }
-        },
-        {
-          "type": "null"
-        }
-      ]
+    "type_id": {
+      "type": ["null", "string"]
     },
-    "single_field_array": {
-      "anyOf": [
-        {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        {
-          "type": "null"
-        }
-      ]
+    "id": {
+      "type": ["null", "integer"]
     },
-    
-    "ADD_FIELDS_HERE": ""
+    "security_id": {
+      "type": ["null", "integer"]
+    },
+    "status_id": {
+      "type": ["null", "integer"]
+    },
+    "ownership_percentage": {
+      "type": ["null", "number"]
+    },
+    "commitment": {
+      "type": ["null", "number"]
+    },
+    "currency": {
+      "type": ["null", "string"]
+    },
+    "is_soft_deleted": {
+      "type": ["null", "boolean"],
+      "default": false
+    }
   }
 }
