@@ -6,7 +6,7 @@ spec](https://github.com/singer-io/getting-started/blob/master/SPEC.md).
 
 This tap:
 
-- Pulls raw data from the [IPREO iLevel SOAP API]()
+- Pulls raw data from the [iLevel Portfolio Monitoring Platform](https://ihsmarkit.com/products/ilevel.html) by **IHS Markit** using a SOAP API [WSDL](https://services.ilevelsolutions.com/DataService/Service/2019/Q1/DataService.svc?singleWsdl). Documentation provided in [Web Services Guide](https://github.com/bytecodeio/tap-ilevel/blob/master/web_services_guide-2019Q1.pdf) (PDF).
 - Extracts the following resources:
   - assets
   - data_items
