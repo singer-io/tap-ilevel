@@ -8,21 +8,21 @@ This tap:
 
 - Pulls raw data from the [IPREO iLevel SOAP API]()
 - Extracts the following resources:
-  - [Branches](https://api.ilevel.com/?http#branches-getAll)
+  - assets
+  - data_items
+  - funds
+  - investments
+  - scenarios
+  - securities
+  - investment_transactions
+  - periodic_data_standardized
+  - relations:
+    - asset_to_asset_relations
+    - fund_to_asset_relations
+    - fund_to_fund_relations
 
 - Outputs the schema for each resource
 - Incrementally pulls data based on the input state
-
-## Streams
-[**branches (GET v2)**](https://api.ilevel.com/?http#branches-getAll)
-- Endpoint: https://instance.sandbox.ilevel.com/api/branches
-- Primary keys: id
-- Foreign keys: custom_field_set_id, custom_field_id (custom_field_sets)
-- Replication strategy: Incremental (query all, filter results)
-  - Sort by: lastModifiedDate:ASC
-  - Bookmark: last_modified_date (date-time)
-- Transformations: Fields camelCase to snake_case, Abstract/generalize custom_field_sets
-
 
 ## Quick Start
 
@@ -44,7 +44,7 @@ This tap:
     > pip install singer-python
     > pip install singer-tools
     > pip install target-stitch
-    > pip install target-json
+    > pip install suds-jurko
     
     ```
     - [singer-tools](https://github.com/singer-io/singer-tools)
@@ -56,8 +56,10 @@ This tap:
     {
         "username": "YOUR_USERNAME",
         "password": "YOUR_PASSWORD",
-        "subdomain": "YOUR_SUBDOMAIN",
-        "start_date": "2019-01-01T00:00:00Z",
+        "is_sandbox": "false",
+        "wsdl_year": "2019",
+        "wsdl_quarter": "Q1",
+        "start_date": "2015-01-01T00:00:00Z",
         "user_agent": "tap-ilevel <api_user_email@your_company.com>"
     }
     ```
@@ -68,22 +70,13 @@ This tap:
     {
         "currently_syncing": "tasks",
         "bookmarks": {
-            "branches": "2019-06-11T13:37:51Z",
-            "communications": "2019-06-19T19:48:42Z",
-            "centres": "2019-06-18T18:23:53Z",
-            "clients": "2019-06-20T00:52:44Z",
-            "credit_arrangements": "2019-06-19T19:48:45Z",
-            "custom_field_sets": "2019-06-11T13:37:56Z",
-            "deposit_accounts": "2019-06-19T19:48:47Z",
-            "cards": "2019-06-18T18:23:58Z",
-            "deposit_products": "2019-06-20T00:52:49Z",
-            "deposit_transactions": "2019-06-20T00:52:40Z",
-            "groups": "2019-06-19T19:48:41Z",
-            "loan_accounts": "2019-06-11T13:37:52Z",
-            "loan_products": "2019-06-20T00:52:43Z",
-            "loan_transactions": "2019-06-19T19:48:44Z",
-            "tasks": "2019-06-18T18:23:55Z",
-            "users": "2019-06-20T00:52:46Z"
+            "funds": "2020-06-01",
+            "investment_transactions": "2020-06-29",
+            "securities": "2020-06-29",
+            "data_items": "2020-07-10",
+            "periodic_data_standardized": "2020-07-09",
+            "investments": "2020-07-09",
+            "assets": "2020-07-09"
         }
     }
     ```
@@ -123,7 +116,7 @@ This tap:
     ```
     Pylint test resulted in the following score:
     ```bash
-    Your code has been rated at 9.87/10.
+    Your code has been rated at 9.77/10.
     ```
 
     To [check the tap](https://github.com/singer-io/singer-tools#singer-check-tap) and verify working:
@@ -134,33 +127,28 @@ This tap:
     Check tap resulted in the following:
     ```bash
     The output is valid.
-    It contained 228 messages for 16 streams.
+    It contained 226149 messages for 9 streams.
 
-        17 schema messages
-        167 record messages
-        44 state messages
+        18 schema messages
+    224918 record messages
+    1213 state messages
 
     Details by stream:
-    +----------------------+---------+---------+
-    | stream               | records | schemas |
-    +----------------------+---------+---------+
-    | deposit_transactions | 9       | 1       |
-    | cards                | 1       | 2       |
-    | clients              | 102     | 1       |
-    | loan_products        | 2       | 1       |
-    | branches             | 2       | 1       |
-    | deposit_products     | 1       | 1       |
-    | centres              | 2       | 1       |
-    | users                | 3       | 1       |
-    | credit_arrangements  | 2       | 1       |
-    | communications       | 1       | 1       |
-    | deposit_accounts     | 2       | 1       |
-    | custom_field_sets    | 19      | 1       |
-    | loan_transactions    | 6       | 1       |
-    | groups               | 2       | 1       |
-    | tasks                | 7       | 1       |
-    | loan_accounts        | 6       | 1       |
-    +----------------------+---------+---------+
+    +----------------------------+---------+---------+
+    | stream                     | records | schemas |
+    +----------------------------+---------+---------+
+    | periodic_data_standardized | 286285  | 2       |
+    | investment_transactions    | 25856   | 2       |
+    | assets                     | 221     | 2       |
+    | asset_to_asset_relations   | 0       | 2       |
+    | scenarios                  | 3       | 2       |
+    | fund_to_asset_relations    | 233     | 2       |
+    | funds                      | 5       | 2       |
+    | securities                 | 454     | 2       |
+    | fund_to_fund_relations     | 0       | 2       |
+    | data_items                 | 8359    | 2       |
+    | investments                | 215643  | 2       |
+    +----------------------------+---------+---------+
     ```
 ---
 

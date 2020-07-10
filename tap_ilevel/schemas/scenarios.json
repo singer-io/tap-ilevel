@@ -2,14 +2,14 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "id": { 
-			"type": ["null", "integer"]
-		},
-    "name": { 
-			"type": ["null", "string"]
+    "id": {
+      "type": ["null", "integer"]
     },
-    "excel_name": { 
-			"type": ["null", "string"]
+    "name": {
+      "type": ["null", "string"]
+    },
+    "excel_name": {
+      "type": ["null", "string"]
     },
     "is_soft_deleted": {
       "type": ["null", "boolean"],

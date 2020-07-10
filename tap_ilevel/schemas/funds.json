@@ -17,7 +17,7 @@
     "status": {
       "type": ["null", "integer"]
     },
-	"currency_code": {
+    "currency_code": {
       "type": ["null", "string"]
     },
     "enabled_capabilities_string": {
@@ -26,7 +26,7 @@
     "type_of_plan_id": {
       "type": ["null", "string"]
     },
-	"calendar_type": {
+    "calendar_type": {
       "type": ["null", "string"]
     },
     "object_type_id": {
@@ -63,18 +63,20 @@
       "default": false
     },
     "period_mapping": {
-      "fiscal_period_mapping": {
       "type": ["null", "object"],
       "additionalProperties": false,
       "properties": {
-        "anyOf": [
-          {
-            "type": "array",
-            "items": {
-              "type": ["null", "object"],
-              "additionalProperties": false,
-              "properties": {
+        "fiscal_period_mapping": {
+          "anyOf": [{
+              "type": "array",
+              "items": {
+                "type": ["null", "object"],
+                "additionalProperties": false,
+                "properties": {
                   "calendar_period": {
+                    "type": ["null", "integer"]
+                  },
+                  "calendar_quarter": {
                     "type": ["null", "integer"]
                   },
                   "calendar_quarter_offset": {
@@ -86,18 +88,29 @@
                   "fiscal_period": {
                     "type": ["null", "integer"]
                   },
+                  "fiscal_quarter": {
+                    "type": ["null", "integer"]
+                  },
                   "object_id": {
                     "type": ["null", "integer"]
+                  },
+                  "is_fiscal_year_end": {
+                    "type": ["null", "boolean"],
+                    "default": false
+                  },
+                  "is_calendar_year_end": {
+                    "type": ["null", "boolean"],
+                    "default": false
                   }
+                }
               }
+            },
+            {
+              "type": "null"
             }
-          },
-          {
-            "type": "null"
-          }
-        ]
+          ]
+        }
       }
-    }
     }
   }
 }
