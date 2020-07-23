@@ -21,9 +21,6 @@ LOGGER = singer.get_logger()
 REQUIRED_CONFIG_KEYS = [
     'username',
     'password',
-    'is_sandbox',
-    'wsdl_year',
-    'wsdl_quarter',
     'start_date'
 ]
 
