@@ -23,8 +23,8 @@ class RequestState:
 
 # Given a series of common parameters, combine them into a data structure to minimize
 #   complexity of passing frequently used data as method parameters.
-def get_request_state(client, stream_name, start_date, last_date, end_date, state, bookmark_field,
-                        id_fields, stream, catalog):
+def get_request_state(client, stream_name, start_date, last_date, end_date, state,
+                      bookmark_field, id_fields, stream, catalog):
     # pylint: disable=attribute-defined-outside-init
     req_state = RequestState()
     req_state.client = client
@@ -83,7 +83,7 @@ def write_bookmark(state, stream, value):
     if 'bookmarks' not in state:
         state['bookmarks'] = {}
     state['bookmarks'][stream] = value
-    LOGGER.info('Write state for stream: {}, value: {}'.format(stream, value))
+    LOGGER.info('Write state for stream: %s, value: %s', stream, value)
     singer.write_state(state)
 
 

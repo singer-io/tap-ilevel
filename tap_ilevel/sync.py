@@ -16,6 +16,7 @@ LOGGER = singer.get_logger()
 
 def transform_datetime(this_dttm):
     with Transformer() as transformer:
+        # pylint: disable=protected-access
         new_dttm = transformer._transform_datetime(this_dttm)
     return new_dttm
 
@@ -40,8 +41,7 @@ def process_records(result_records,
     bookmark_field = req_state.bookmark_field
     last_date = req_state.last_date
 
-    LOGGER.info('{}: Preparing to publish {} records'.format(
-        stream_name, len(result_records)))
+    LOGGER.info('%s: Preparing to publish %s records', stream_name, len(result_records))
 
     stream = req_state.catalog.get_stream(stream_name)
     schema = stream.schema.to_dict()
@@ -52,7 +52,7 @@ def process_records(result_records,
         transformed_data = transform_json(result_records)
     except Exception as err:
         LOGGER.error(err)
-        LOGGER.error('result_records = {}'.format(result_records))
+        LOGGER.error('result_records = %s', result_records)
         raise err
 
     with metrics.record_counter(req_state.stream_name) as counter:
@@ -69,7 +69,7 @@ def process_records(result_records,
                         stream_metadata)
                 except Exception as err:
                     LOGGER.error(err)
-                    LOGGER.error('Error record: {}'.format(record))
+                    LOGGER.error('Error record: %s', record)
                     raise err
 
             # Reset max_bookmark_value to new value if higher
@@ -96,8 +96,8 @@ def process_records(result_records,
                     req_state.stream_name, transformed_record, utils.now())
                 counter.increment()
 
-        LOGGER.info('{}: Published {} records, max_bookmark_value: {}'.format(
-            stream_name, counter.value, max_bookmark_value))
+        LOGGER.info('%s: Published %s records, max_bookmark_value: %s', stream_name,
+                    counter.value, max_bookmark_value)
         return max_bookmark_value, counter.value
 
 
@@ -209,9 +209,9 @@ def __process_incremental_stream(req_state):
             cur_end_date = date_chunks[cur_date_range_index]
             cur_date_range_index = cur_date_range_index + 1
 
-        LOGGER.info('{}: Processing date range {} of {} total ({} - {})'.format(
-            req_state.stream_name, cur_date_range_index, cur_date_criteria_length, \
-                cur_start_date, cur_end_date))
+        LOGGER.info('%s: Processing date range %s of %s total (%s - %s)',
+                    req_state.stream_name, cur_date_range_index, cur_date_criteria_length,
+                    cur_start_date, cur_end_date)
 
         #Retrieve updated entities for given date range, and send for processing
         updated_object_id_sets = ilevel.get_updated_object_id_sets(
@@ -222,8 +222,8 @@ def __process_incremental_stream(req_state):
             cur_id_set_index = 0
             for id_set in updated_object_id_sets:
                 updated_record_count = 0
-                LOGGER.info('{}: Processing id set {} of {} total sets'.format(
-                    req_state.stream_name, cur_id_set_index + 1, len(updated_object_id_sets)))
+                LOGGER.info('%s: Processing id set %s of %s total sets',
+                            req_state.stream_name, cur_id_set_index + 1, len(updated_object_id_sets))
 
                 # Process updated object stream id set
                 max_bookmark_value_upd, updated_record_count = \
@@ -244,8 +244,8 @@ def __process_incremental_stream(req_state):
             cur_id_set_index = 0
             for id_set in deleted_object_id_sets:
                 deleted_record_count = 0
-                LOGGER.info('{}: Processing deleted id set {} of {} total sets'.format(
-                    req_state.stream_name, cur_id_set_index + 1, len(deleted_object_id_sets)))
+                LOGGER.info('%s: Processing deleted id set %s of %s total sets', req_state.stream_name,
+                            cur_id_set_index + 1, len(deleted_object_id_sets))
                 # Process deleted records
                 max_bookmark_value_del, deleted_record_count = \
                     __process_deleted_object_stream_id_set(
@@ -368,13 +368,13 @@ def __sync_endpoint(req_state):
 
     with metrics.job_timer('endpoint_duration'):
 
-        LOGGER.info('{}: STARTED Syncing stream'.format(req_state.stream_name))
+        LOGGER.info('%s: STARTED Syncing stream', req_state.stream_name)
         singer_ops.update_currently_syncing(req_state.state, req_state.stream_name)
 
         # Publish schema to singer
         singer_ops.write_schema(req_state.catalog, req_state.stream_name)
-        LOGGER.info('{}: Processing date window, {} to {}'.format(
-            req_state.stream_name, req_state.last_date, req_state.end_date))
+        LOGGER.info('%s: Processing date window, %s to %s', req_state.stream_name,
+                    req_state.last_date, req_state.end_date)
 
         if req_state.stream_name in ALL_RECORDS_STREAMS:
             endpoint_total = __process_all_records_data_stream(req_state)
@@ -387,8 +387,8 @@ def __sync_endpoint(req_state):
             endpoint_total = __process_incremental_stream(req_state)
 
         singer_ops.update_currently_syncing(req_state.state, None)
-        LOGGER.info('{}: FINISHED Syncing Stream, total_records: {}'.format(
-            req_state.stream_name, endpoint_total))
+        LOGGER.info('%s: FINISHED Syncing Stream, total_records: %s',
+                    req_state.stream_name, endpoint_total)
 
     LOGGER.info('sync.py: sync complete')
 
@@ -402,14 +402,12 @@ def sync(client, config, catalog, state):
     # Get selected_streams from catalog, based on state last_stream
     #   last_stream = Previous currently synced stream, if the load was interrupted
     last_stream = singer.get_currently_syncing(state)
-    LOGGER.info('last/currently syncing stream: {}'.format(last_stream))
+    LOGGER.info('last/currently syncing stream: %s', last_stream)
     selected_streams = []
     selected_streams_by_name = {}
     for stream in catalog.get_selected_streams(state):
         selected_streams.append(stream.stream)
         selected_streams_by_name[stream.stream] = stream
-
-    LOGGER.info('selected_streams: {}'.format(selected_streams))
 
     if not selected_streams or selected_streams == []:
         return
@@ -417,7 +415,7 @@ def sync(client, config, catalog, state):
     # Loop through endpoints in selected_streams
     for stream_name, endpoint_config in STREAMS.items():
         if stream_name in selected_streams:
-            LOGGER.info('START Syncing: {}'.format(stream_name))
+            LOGGER.info('START Syncing: %s', stream_name)
             stream = selected_streams_by_name[stream_name]
 
             bookmark_field = next(iter(endpoint_config.get('replication_keys', [])), None)
@@ -443,8 +441,6 @@ def sync(client, config, catalog, state):
             # Main sync routine
             total_records = __sync_endpoint(req_state)
 
-            LOGGER.info('FINISHED Syncing: {}, total_records: {}'.format(
-                stream_name,
-                total_records))
+            LOGGER.info('FINISHED Syncing: %s, total_records: %s', stream_name, total_records)
 
     LOGGER.info('sync.py: sync complete')
