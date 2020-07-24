@@ -14,6 +14,13 @@ setup(name='tap-ilevel',
           'requests==2.23.0',
           'singer-python==5.9.0'
       ],
+      extras_require={
+        'dev': [
+            'pylint',
+            'ipdb',
+            'nose'
+        ]
+      },
       entry_points='''
           [console_scripts]
           tap-ilevel=tap_ilevel:main
