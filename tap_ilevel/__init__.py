@@ -21,9 +21,6 @@ LOGGER = singer.get_logger()
 REQUIRED_CONFIG_KEYS = [
     'username',
     'password',
-    'is_sandbox',
-    'wsdl_year',
-    'wsdl_quarter',
     'start_date'
 ]
 
@@ -70,10 +67,10 @@ def main():
 
     wsdl_year = config.get('wsdl_year', '2019')
     wsdl_quarter = config.get('wsdl_quarter', 'Q1')
-    sandbox_flag = config.get('is_sandbox', 'False')
+    sandbox_flag = config.get('is_sandbox', 'false')
     is_sandbox = False
-    if sandbox_flag == "True":
-        sandbox_flag = True
+    if sandbox_flag == "true":
+        is_sandbox = True
 
     LOGGER.info('init: is sandbox: %s', config.get('is_sandbox'))
     if is_sandbox:
