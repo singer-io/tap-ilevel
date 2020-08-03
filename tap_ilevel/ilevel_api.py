@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from datetime import time, datetime, timedelta
 import dateutil.parser
 import json
@@ -23,7 +25,7 @@ def get_date_chunks(start_date, end_date, max_days):
     if isinstance(start_date, str):
         start_date = datetime.strptime(start_date, '%Y-%m-%d')
 
-    days_dif = get_num_days_diff(start_date, end_date)
+    days_dif = abs((start_date - end_date).days)
     if days_dif < max_days:
         result.append(start_date)
         result.append(end_date)
@@ -45,11 +47,6 @@ def get_date_chunks(start_date, end_date, max_days):
         result.append(next_date)
 
     return result
-
-
-# Provides ability to determine number of days between two given dates.
-def get_num_days_diff(start_date, end_date):
-    return abs((start_date - end_date).days)
 
 
 # Convert an object to a dictionary object, dates are converted as required.
@@ -253,42 +250,9 @@ def get_object_details_by_ids(object_ids, stream_name, client):
 #  we need to support the ability to split a given set into chunks of a given size. Note, we are
 #  accepting a SOAP data type (ArrayOfInts) and returning an array of arrays which will need to
 #  be converted prior to submission to any additional SOAP calls.
-def split_ids_into_chunks(ids, max_len):
-    result = []
-    if len(ids) < max_len:
-        cur_id_set = []
-        for cur_id in ids:
-            cur_id_set.append(cur_id)
-        result.append(cur_id_set)
-        return result
-
-    chunk_count = len(ids) // max_len
-    remaining_records = len(ids) % max_len
-
-    cur_chunk_index = 0
-    total_index = 0
-    source_index = 0
-    while cur_chunk_index < chunk_count:
-        cur_id_set = []
-        while source_index < max_len:
-            cur_id_set.append(ids[total_index])
-            total_index = total_index + 1
-            source_index = source_index + 1
-        result.append(cur_id_set)
-        cur_chunk_index = cur_chunk_index + 1
-
-    if remaining_records > 0:
-        source_index = 0
-        cur_id_set = []
-        cur_chunk_index = cur_chunk_index + 1
-        source_index = 0
-        while source_index < remaining_records:
-            cur_id_set.append(ids[total_index])
-            total_index = total_index + 1
-            source_index = source_index + 1
-        result.append(cur_id_set)
-
-    return result
+def split_ids_into_chunks(data, max_len):
+    chunks = [data[x:x+max_len] for x in range(0, len(data), max_len)]
+    return chunks
 
 
 # Retrieve 'chunked' ids of objects that have have been deleted within the specified
@@ -322,7 +286,7 @@ def get_updated_object_id_sets(start_dt, end_dt, client, stream_name):
     object_type = client.factory.create('tns:UpdatedObjectTypes')
     asset_ref, data_key = __get_asset_ref(object_type, stream_name)
 
-    if get_num_days_diff(start_dt, end_dt) > MAX_DATE_WINDOW:
+    if abs((start_dt - end_dt).days) > MAX_DATE_WINDOW:
         fmt = "%Y-%m-%d"
         raise AssertionError('Values supplied for max date window exceed threshold, '+
                              start_dt.strftime(fmt) +' - '+ end_dt.strftime(fmt))
@@ -392,8 +356,10 @@ def get_standardized_data_id_chunks(start_dt, end_dt, client):
     if isinstance(updated_data_ids, str):
         return []
 
-    updated_data_ids_arr = updated_data_ids.int
-    return split_ids_into_chunks(updated_data_ids_arr, MAX_ID_CHUNK_SIZE)
+    data = updated_data_ids.int  
+    chunks = split_ids_into_chunks(data, MAX_ID_CHUNK_SIZE)
+    
+    return chunks
 
 
 # Perform iGetBatch operations for a given set of 'standardized ids', which will return

@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from datetime import datetime, timedelta
 import json
 import copy
@@ -347,6 +349,7 @@ def __process_standardized_data_stream(req_state):
             processed_record_count = 0
             max_bookmark_value, processed_record_count = process_iget_batch_for_standardized_id_set(
                 id_set, req_state, max_bookmark_value)
+
             LOGGER.info('periodic_data_standardized, {} - {}, Batch #{}, Requests: {}, Results: {}'.format(
                 cur_start_date, cur_end_date, batch, len(id_set), processed_record_count))
             update_count = update_count + processed_record_count
@@ -477,8 +480,12 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
                         # LOGGER.info('i_get_params = {}'.format(i_get_params)) # COMMENT OUT
 
                         # run iGetBatch
-                        if (req_id % batch_size == 0) or (pd == period_diff and period_type == last_period_type \
+                        end_of_batches = False
+                        if (pd == (period_diff + 1) and period_type == last_period_type \
                             and ent == entity_objs_len and cdi == calc_data_items_len and entity_type == 'assets'):
+                            end_of_batches = True
+                            LOGGER.info('xxx END OF BATCHES xxx')
+                        if (req_id % batch_size == 0) or end_of_batches:
                             LOGGER.info('xxx BATCH: {} xxx'.format(batch))
                             i_get_count = len(i_get_params_list)
                             i_get_request = req_state.client.factory.create('DataServiceRequest')
