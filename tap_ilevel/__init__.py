@@ -21,6 +21,9 @@ LOGGER = singer.get_logger()
 REQUIRED_CONFIG_KEYS = [
     'username',
     'password',
+    'is_sandbox',
+    'wsdl_year',
+    'wsdl_quarter',
     'start_date'
 ]
 
@@ -32,7 +35,6 @@ class SoapFixer(MessagePlugin):
         # incompatible XML.
         context.envelope.walk(self.fix_any_type_string)
 
-    # pylint: disable=no-self-use
     def fix_any_type_string(self, element):
         """Used as a filter function with walk in order to fix errors.
         If the element has a certain name, give it a xsi:type=xsd:int. Note that the nsprefix xsd
@@ -68,10 +70,10 @@ def main():
 
     wsdl_year = config.get('wsdl_year', '2019')
     wsdl_quarter = config.get('wsdl_quarter', 'Q1')
-    sandbox_flag = config.get('is_sandbox', 'false')
+    sandbox_flag = config.get('is_sandbox', 'False')
     is_sandbox = False
-    if sandbox_flag == "true":
-        is_sandbox = True
+    if sandbox_flag == "True":
+        sandbox_flag = True
 
     LOGGER.info('init: is sandbox: %s', config.get('is_sandbox'))
     if is_sandbox:

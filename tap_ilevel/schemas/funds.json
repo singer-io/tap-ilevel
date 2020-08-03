@@ -43,11 +43,11 @@
     },
     "initial_period": {
       "type": ["null", "string"],
-      "format": "datetime"
+      "format": "date-time"
     },
     "last_modified_date": {
       "type": ["null", "string"],
-      "format": "datetime"
+      "format": "date-time"
     },
     "status_id": {
       "type": ["null", "integer"]

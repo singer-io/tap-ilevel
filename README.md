@@ -16,6 +16,7 @@ This tap:
   - securities
   - investment_transactions
   - periodic_data_standardized
+  - periodic_data_calculated
   - relations:
     - asset_to_asset_relations
     - fund_to_asset_relations
@@ -152,4 +153,4 @@ This tap:
     ```
 ---
 
-Copyright &copy; 2020 Stitch
+Copyright &copy; 2019 Stitch
