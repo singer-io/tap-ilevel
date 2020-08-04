@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from datetime import time, datetime, timedelta
 import dateutil.parser
 import json

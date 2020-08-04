@@ -153,4 +153,4 @@ This tap:
     ```
 ---
 
-Copyright &copy; 2019 Stitch
+Copyright &copy; 2020 Stitch

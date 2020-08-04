@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from datetime import datetime
 import singer
 
@@ -87,7 +85,7 @@ def write_bookmark(state, stream, value):
     if 'bookmarks' not in state:
         state['bookmarks'] = {}
     state['bookmarks'][stream] = value
-    LOGGER.info('Write state for stream: {}, value: {}'.format(stream, value))
+    LOGGER.info('Write state for stream: %s, value: %s', stream, value)
     singer.write_state(state)
 
 
