@@ -16,11 +16,11 @@ This tap:
   - securities
   - investment_transactions
   - periodic_data_standardized
+  - periodic_data_calculated
   - relations:
     - asset_to_asset_relations
     - fund_to_asset_relations
     - fund_to_fund_relations
-
 - Outputs the schema for each resource
 - Incrementally pulls data based on the input state
 
@@ -60,7 +60,8 @@ This tap:
         "wsdl_year": "2019",
         "wsdl_quarter": "Q1",
         "start_date": "2015-01-01T00:00:00Z",
-        "user_agent": "tap-ilevel <api_user_email@your_company.com>"
+        "user_agent": "tap-ilevel <api_user_email@your_company.com>",
+        "period_types": "FiscalQuarter"
     }
     ```
     

@@ -10,6 +10,7 @@ setup(name='tap-ilevel',
       py_modules=['tap_ilevel'],
       install_requires=[
           'suds-jurko==0.6',
+          'pyhumps==1.6.1',
           'backoff==1.8.0',
           'requests==2.23.0',
           'singer-python==5.9.0'

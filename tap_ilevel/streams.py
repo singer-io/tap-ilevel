@@ -71,7 +71,13 @@ STREAMS = {
     },
 
     'periodic_data_standardized': {
-        'key_properties': ['standardized_data_id'],
+        'key_properties': ['hash_key'],
+        'replication_method': 'INCREMENTAL',
+        'replication_keys': ['reported_date_value']
+    },
+
+    'periodic_data_calculated': {
+        'key_properties': ['hash_key'],
         'replication_method': 'INCREMENTAL',
         'replication_keys': ['reported_date_value']
     }

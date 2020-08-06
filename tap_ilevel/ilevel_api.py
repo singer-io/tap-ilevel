@@ -1,11 +1,12 @@
 from datetime import time, datetime, timedelta
 import dateutil.parser
+import json
 
 import singer
 from singer import metrics
 
 from tap_ilevel.constants import MAX_ID_CHUNK_SIZE, MAX_DATE_WINDOW
-
+from tap_ilevel.transform import transform_json, hash_data
 
 LOGGER = singer.get_logger()
 
@@ -22,7 +23,7 @@ def get_date_chunks(start_date, end_date, max_days):
     if isinstance(start_date, str):
         start_date = datetime.strptime(start_date, '%Y-%m-%d')
 
-    days_dif = get_num_days_diff(start_date, end_date)
+    days_dif = abs((start_date - end_date).days)
     if days_dif < max_days:
         result.append(start_date)
         result.append(end_date)
@@ -46,15 +47,19 @@ def get_date_chunks(start_date, end_date, max_days):
     return result
 
 
-# Provides ability to determine number of days between two given dates.
-def get_num_days_diff(start_date, end_date):
-    return abs((start_date - end_date).days)
-
-
 # Convert an object to a dictionary object, dates are converted as required.
 def obj_to_dict(obj):
     if not  hasattr(obj, "__dict__"):
-        return obj
+        if isinstance(obj, (datetime, time)):
+            # All iLevel datateimes are UTC (Z) time zone
+            dttm = '{}Z'.format(obj.isoformat()).replace('+00:00', '')
+            return dttm
+        elif type(obj) == type(None):
+            return obj
+        elif isinstance(obj, (int, float, bool, list, dict)):
+            return obj
+        else:
+            return str(obj)
     result = {}
     for key, val in obj.__dict__.items():
         if key.startswith("_"):
@@ -83,7 +88,7 @@ def sobject_to_dict(obj, key_to_lower=False, json_serialize=True):
             # All iLevel datateimes are UTC (Z) time zone
             dttm = '{}Z'.format(obj.isoformat()).replace('+00:00', '')
             return dttm
-        elif isinstance(obj, type(None)):
+        elif type(obj) == type(None):
             return obj
         elif isinstance(obj, (int, float, bool, list, dict)):
             return obj
@@ -112,119 +117,6 @@ def convert_iso_8601_date(date_str):
     cur_date_ref = dateutil.parser.parse(date_str)
     cur_date_ref = cur_date_ref.replace(tzinfo=None)
     return cur_date_ref
-
-
-# Object used to store values retrieved from iGetBatch(...) operations. The intent is to
-# provide a wrapper for returned data, which is intended to be published.
-class IGetFormula:
-    # pylint: disable=invalid-name,unused-variable
-    def __init__(self):
-        DataItemId = None
-        PeriodEnd = None
-        ReportedDate = None
-        ScenarioId = None
-        EntitiesPath = None
-        DataValueType = None
-        StandardizedDataId = None
-        ValueNumeric = None
-        ValueString = None
-        FormulaTypeIDsString = 'None'
-        PeriodIsOffset = False
-        PeriodQuantity = 0
-        PeriodType = ''
-
-        ReportDateIsFiscal = None
-        ReportDatePeriodsQuantity = None
-        ReportDateType = None
-        ReportedDateValue = None
-
-        EndOfPeriodIsFiscal = False
-        EndOfPeriodPeriodsQuantity = 0
-        EndOfPeriodType = ''
-        EndOfPeriodValue = ''
-        RawValue = ''
-
-
-# Given an object returned from the SOAP API, convert into simplified object intended for
-#  publishing to Singer.
-# pylint: disable=invalid-name,attribute-defined-outside-init
-def convert_ipush_event_to_obj(event):
-    result = IGetFormula()
-
-    if event.Value is None:
-        result.RawValue = "None"
-    else:
-        result.RawValue = event.Value
-    if isinstance(event.Value, (float, int)):
-        result.ValueNumeric = event.Value
-    else:
-        result.ValueString = str(event.Value)
-
-    result.DataItemId = event.SDParameters.DataItemId
-
-    result.ScenarioId = event.SDParameters.ScenarioId
-    result.DataValueType = event.SDParameters.DataValueType
-    result.StandardizedDataId = event.SDParameters.StandardizedDataId
-    if "FormulaTypeIDsString" in event:
-        result.FormulaTypeIDsString = event.SDParameters.FormulaTypeIDsString
-    result.CurrencyCode = event.SDParameters.CurrencyCode
-
-    #Period related
-    result.PeriodIsOffset = event.SDParameters.Period.IsOffset
-    result.PeriodQuantity = event.SDParameters.Period.Quantity
-    result.PeriodType = event.SDParameters.Period.Type
-
-    #Report date related
-    result.ReportDateIsFiscal = event.SDParameters.ReportedDate.IsFiscal
-    result.ReportDatePeriodsQuantity = event.SDParameters.ReportedDate.PeriodsQuantity
-    result.ReportDateType = event.SDParameters.ReportedDate.Type
-    result.ReportedDateValue = convert_iso_8601_date(event.SDParameters.ReportedDate.Value)
-
-    #End of period related
-    result.EndOfPeriodIsFiscal = event.SDParameters.EndOfPeriod.IsFiscal
-    result.EndOfPeriodPeriodsQuantity = event.SDParameters.EndOfPeriod.PeriodsQuantity
-    result.EndOfPeriodType = event.SDParameters.EndOfPeriod.Type
-    result.EndOfPeriodValue = convert_iso_8601_date(event.SDParameters.EndOfPeriod.Value)
-
-    return result
-
-
-# pylint: disable=invalid-name
-def copy_i_get_result(source):
-    result = IGetFormula()
-
-    result.RawValue = str(source.RawValue)
-
-    if hasattr(source, "ValueString"):
-        result.ValueString = source.ValueString
-    else:
-        result.ValueNumeric = source.ValueNumeric
-
-    result.DataItemId = source.DataItemId
-    result.ScenarioId = source.ScenarioId
-    result.DataValueType = source.DataValueType
-    result.StandardizedDataId = source.StandardizedDataId
-
-    result.CurrencyCode = source.CurrencyCode
-
-    # Period related
-    result.PeriodIsOffset = source.PeriodIsOffset
-    result.PeriodQuantity = source.PeriodQuantity
-    result.PeriodType = source.PeriodType
-
-    # Report date related
-    result.ReportDateIsFiscal = source.ReportDateIsFiscal
-    result.ReportDatePeriodsQuantity = source.ReportDatePeriodsQuantity
-    result.ReportDateType = source.ReportDateType
-    result.ReportedDateValue = source.ReportedDateValue
-
-    # End of period related
-    result.EndOfPeriodIsFiscal = source.EndOfPeriodIsFiscal
-    result.EndOfPeriodPeriodsQuantity = source.EndOfPeriodPeriodsQuantity
-    result.EndOfPeriodType = source.EndOfPeriodType
-    result.EndOfPeriodValue = source.EndOfPeriodValue
-
-    return result
 
 
 # Given stream name, identify the corresponding Soap identifier to send to the API. This is
@@ -315,6 +207,7 @@ def get_all_objects(stream_name, client):
         try:
             response = sobject_to_dict(call_response).get(data_key, [])
         except AttributeError as err:
+            LOGGER.info('ERROR call_response = {}'.format(sobject_to_dict(call_response)))
             pass
 
     return response
@@ -345,6 +238,7 @@ def get_object_details_by_ids(object_ids, stream_name, client):
         # response = call_response.NamedEntity
         response = sobject_to_dict(call_response).get(data_key, [])
     except AttributeError as err:
+        LOGGER.info('ERROR call_response = {}'.format(sobject_to_dict(call_response)))
         pass
 
     return response
@@ -354,49 +248,16 @@ def get_object_details_by_ids(object_ids, stream_name, client):
 #  we need to support the ability to split a given set into chunks of a given size. Note, we are
 #  accepting a SOAP data type (ArrayOfInts) and returning an array of arrays which will need to
 #  be converted prior to submission to any additional SOAP calls.
-def split_ids_into_chunks(ids, max_len):
-    result = []
-    if len(ids) < max_len:
-        cur_id_set = []
-        for cur_id in ids:
-            cur_id_set.append(cur_id)
-        result.append(cur_id_set)
-        return result
-
-    chunk_count = len(ids) // max_len
-    remaining_records = len(ids) % max_len
-
-    cur_chunk_index = 0
-    total_index = 0
-    source_index = 0
-    while cur_chunk_index < chunk_count:
-        cur_id_set = []
-        while source_index < max_len:
-            cur_id_set.append(ids[total_index])
-            total_index = total_index + 1
-            source_index = source_index + 1
-        result.append(cur_id_set)
-        cur_chunk_index = cur_chunk_index + 1
-
-    if remaining_records > 0:
-        source_index = 0
-        cur_id_set = []
-        cur_chunk_index = cur_chunk_index + 1
-        source_index = 0
-        while source_index < remaining_records:
-            cur_id_set.append(ids[total_index])
-            total_index = total_index + 1
-            source_index = source_index + 1
-        result.append(cur_id_set)
-
-    return result
+def split_ids_into_chunks(data, max_len):
+    chunks = [data[x:x+max_len] for x in range(0, len(data), max_len)]
+    return chunks
 
 
 # Retrieve 'chunked' ids of objects that have have been deleted within the specified
 #  date windows.
 def get_deleted_object_id_sets(start_dt, end_dt, client, stream_name):
     object_type = client.factory.create('tns:UpdatedObjectTypes')
-    asset_ref, _ = __get_asset_ref(object_type, stream_name)
+    asset_ref, data_key = __get_asset_ref(object_type, stream_name)
 
     # pylint: disable=unused-variable
     with metrics.http_request_timer('Retrieve deleted object data summary') as timer:
@@ -408,6 +269,7 @@ def get_deleted_object_id_sets(start_dt, end_dt, client, stream_name):
     try:
         deleted_asset_ids_all = call_response.int
     except AttributeError as err:
+        LOGGER.info('ERROR call_response = {}'.format(sobject_to_dict(call_response)))
         pass
 
     if isinstance(deleted_asset_ids_all, str) or len(deleted_asset_ids_all) < 1:
@@ -420,9 +282,9 @@ def get_deleted_object_id_sets(start_dt, end_dt, client, stream_name):
 #  date windows. Date window must not exceed maximum window period.
 def get_updated_object_id_sets(start_dt, end_dt, client, stream_name):
     object_type = client.factory.create('tns:UpdatedObjectTypes')
-    asset_ref, _ = __get_asset_ref(object_type, stream_name)
+    asset_ref, data_key = __get_asset_ref(object_type, stream_name)
 
-    if get_num_days_diff(start_dt, end_dt) > MAX_DATE_WINDOW:
+    if abs((start_dt - end_dt).days) > MAX_DATE_WINDOW:
         fmt = "%Y-%m-%d"
         raise AssertionError('Values supplied for max date window exceed threshold, '+
                              start_dt.strftime(fmt) +' - '+ end_dt.strftime(fmt))
@@ -438,6 +300,7 @@ def get_updated_object_id_sets(start_dt, end_dt, client, stream_name):
     try:
         updated_asset_ids_all = call_response.int
     except AttributeError as err:
+        LOGGER.info('ERROR call_response = {}'.format(sobject_to_dict(call_response)))
         pass
 
     if isinstance(updated_asset_ids_all, str) or len(updated_asset_ids_all) < 1:
@@ -470,39 +333,31 @@ def get_investment_transaction_details_by_ids(object_ids, client):
         # response = call_response.InvestmentTransaction
         response = sobject_to_dict(call_response).get('InvestmentTransaction', [])
     except AttributeError as err:
+        LOGGER.info('{}'.format(err))
+        LOGGER.info('ERROR criteria = {}'.format(criteria))
+        LOGGER.info('ERROR call_response dict = {}'.format(sobject_to_dict(call_response)))
         raise err
 
     return response
 
 
-def create_entity_path(client_factory, parent_id, child_id=None):
-    id_array = client_factory.create('ns3:ArrayOfint')
-    id_array.int.append(parent_id)
-    if child_id is not None:
-        id_array.int.append(child_id)
-
-    entity_path = client_factory.create('EntitiesPath')
-    entity_path.Path = id_array
-
-    return entity_path
-
-
-def get_adj_end_date(target_date):
-    return target_date + timedelta(days=1)
-
-
 def get_standardized_data_id_chunks(start_dt, end_dt, client):
+    adj_start_date = start_dt - timedelta(days=1)
+    adj_end_date = end_dt + timedelta(days=1)
+
     # Perform API call to retrieve 'standardized ids' in preparation for next call
     with metrics.http_request_timer('Retrieve standardized ids') as timer:
-        updated_data_ids = client.service.GetUpdatedData(start_dt, get_adj_end_date(end_dt))
+        updated_data_ids = client.service.GetUpdatedData(adj_start_date, adj_end_date)
         LOGGER.info('Request time %s', timer.elapsed)
 
     # Validate that there is data to process
     if isinstance(updated_data_ids, str):
         return []
 
-    updated_data_ids_arr = updated_data_ids.int
-    return split_ids_into_chunks(updated_data_ids_arr, MAX_ID_CHUNK_SIZE)
+    data = updated_data_ids.int  
+    chunks = split_ids_into_chunks(data, MAX_ID_CHUNK_SIZE)
+    
+    return chunks
 
 
 # Perform iGetBatch operations for a given set of 'standardized ids', which will return
@@ -510,7 +365,7 @@ def get_standardized_data_id_chunks(start_dt, end_dt, client):
 def perform_igetbatch_operation_for_standardized_id_set(id_set, req_state):
     data_value_types = req_state.client.factory.create('DataValueTypes')
 
-    req_id = 0
+    req_id = 1
     id_set_len = len(id_set)
     i_get_params_list = req_state.client.factory.create('ArrayOfBaseRequestParameters')
     for cur_id in id_set:
@@ -524,11 +379,11 @@ def perform_igetbatch_operation_for_standardized_id_set(id_set, req_state):
 
     i_get_request = req_state.client.factory.create('DataServiceRequest')
     i_get_request.IncludeStandardizedDataInfo = True
+    i_get_request.IncludeExcelFormula = True
     i_get_request.ParametersList = i_get_params_list
 
     # pylint: disable=unused-variable
-    metrics_string = '{}: iGetBatch with {} request params'.format(
-        req_state.stream_name, id_set_len)
+    metrics_string = ('Standardized Data Item iGetBatch: {} requests'.format(id_set_len))
     with metrics.http_request_timer(metrics_string) as timer:
         data_values = req_state.client.service.iGetBatch(i_get_request)
 
@@ -538,29 +393,136 @@ def perform_igetbatch_operation_for_standardized_id_set(id_set, req_state):
         return []
 
     try:
-        period_data_records = data_values.DataValue
+        periodic_data_records = data_values.DataValue
     except Exception as err:
+        LOGGER.error('{}'.format(err))
+        LOGGER.error('data_values dict = {}'.format(sobject_to_dict(data_values)))
         raise err
 
     results = []
-    for rec in period_data_records:
-        if "Error" in rec:
+    for periodic_data_record in periodic_data_records:
+        if "Error" in periodic_data_record:
             continue
 
-        if "NoDataAvailable" in rec:
+        if "NoDataAvailable" in periodic_data_record:
             continue
 
-        if "Value" in rec:
-            new_rec = convert_ipush_event_to_obj(rec)
+        periodic_data_record_dict = sobject_to_dict(periodic_data_record)
+        # LOGGER.info('period_data_record_dict = {}'.format(periodic_data_record_dict)) # COMMENT OUT
 
-            if len(rec.SDParameters.EntitiesPath.Path.int) > 1:
-                for i in range(len(rec.SDParameters.EntitiesPath.Path.int)):
-                    rec_copy = copy_i_get_result(new_rec)
-                    rec_copy.EntityPath = rec.SDParameters.EntitiesPath.Path.int[i]
-                    results.append(obj_to_dict(rec_copy))
+        transformed_record = transform_json(periodic_data_record_dict)
+        # LOGGER.info('transformed_record = {}'.format(transformed_record)) # COMMENT OUT
+
+        if 'value' in transformed_record:
+            value = transformed_record.get('value')
+            value_string = str(value)
+            if type(value) in (int, float):
+                value_numeric = float(value)
             else:
-                new_rec.EntityPath = rec.SDParameters.EntitiesPath.Path.int[0]
-                results.append(obj_to_dict(new_rec))
+                value_numeric = None
+            if value == 'No Data Available':
+                continue
+
+            sd_parameters = transformed_record.get('sd_parameters', {})
+            excel_formula = transformed_record.get('excel_formula')
+            currency_code = sd_parameters.get('currency_code')
+            data_item_id = sd_parameters.get('data_item_id')
+            data_value_type = sd_parameters.get('data_value_type')
+            detail_id = sd_parameters.get('detail_id')
+            scenario_id = sd_parameters.get('scenario_id')
+            period_type = sd_parameters.get('period', {}).get('type')
+            end_of_period_value = sd_parameters.get('end_of_period', {}).get('value')
+            reported_date_value = sd_parameters.get('reported_date', {}).get('value')
+            exchange_rate_type = sd_parameters.get('exchange_rate', {}).get('type')
+            request_id = sd_parameters.get('request_identifier')
+            standardized_data_id = sd_parameters.get('standardized_data_id')
+
+            entity_ids = sd_parameters.get('entities_path', {}).get('path', {}).get('int', [])
+            for entity_id in entity_ids:
+                # Primary key dimensions, create md5 hash key
+                dimensions = {
+                    'data_item_id': data_item_id,
+                    'entity_id': entity_id,
+                    'excel_formula': excel_formula
+                }
+                hash_key = str(hash_data(json.dumps(dimensions, sort_keys=True)))
+                new_record = {
+                    'hash_key': hash_key,
+                    'excel_formula': excel_formula,
+                    'currency_code': currency_code,
+                    'data_item_id': data_item_id,
+                    'data_value_type': data_value_type,
+                    'detail_id': detail_id,
+                    'entity_id': entity_id,
+                    'scenario_id': scenario_id,
+                    'period_type': period_type,
+                    'end_of_period_value': end_of_period_value,
+                    'reported_date_value': reported_date_value,
+                    'exchange_rate_type': exchange_rate_type,
+                    'request_id': request_id,
+                    'standardized_data_id': standardized_data_id,
+                    'value': value,
+                    'value_string': value_string,
+                    'value_numeric': value_numeric
+                }
+                
+                results.append(new_record)
+            # end for rec in periodic_data_records
 
     # LOGGER.info('results = {}'.format(results)) # COMMENT OUT
     return results
+
+
+# Creates entity_path object with an Asset id_list (array of id's)
+def create_entity_path(req_state, id_list):
+    id_array = req_state.client.factory.create('ns3:ArrayOfint')
+    for id_val in id_list:
+        id_array.int.append(id_val)
+
+    entity_path = req_state.client.factory.create('EntitiesPath')
+    entity_path.Path = id_array
+
+    return entity_path
+
+
+def get_periods(req_state, start_dttm, end_dttm, period_type_name):
+    period = req_state.client.factory.create('Period')
+    period_types = req_state.client.factory.create('PeriodTypes')
+
+    if period_type_name == 'FiscalYear':
+        period.Type = period_types.FiscalYear
+        period_diff = 1 + (end_dttm.year - start_dttm.year)
+        if period_diff < 2:
+            period_diff = 2
+
+    if period_type_name == 'Year':
+        period.Type = period_types.Year
+        period_diff = 1 + (end_dttm.year - start_dttm.year)
+        if period_diff < 2:
+            period_diff = 2
+
+    if period_type_name == 'FiscalQuarter':
+        period.Type = period_types.FiscalQuarter
+        period_diff = 1 + ((end_dttm.year - start_dttm.year) * 4) + ((end_dttm.month - start_dttm.month) // 3)
+        if period_diff < 4:
+            period_diff = 4
+
+    if period_type_name == 'Quarter':
+        period.Type = period_types.Quarter
+        period_diff = 1 + ((end_dttm.year - start_dttm.year) * 4) + ((end_dttm.month - start_dttm.month) // 3)
+        if period_diff < 4:
+            period_diff = 4
+
+    if period_type_name == 'L3M':
+        period.Type = period_types.L3M
+        period_diff = 1 + ((end_dttm.year - start_dttm.year) * 4) + ((end_dttm.month - start_dttm.month) // 3)
+        if period_diff < 4:
+            period_diff = 4
+
+    if period_type_name == 'Month':
+        period.Type = period_types.Month
+        period_diff = 3 + ((end_dttm.year - start_dttm.year) * 12) + (end_dttm.month - start_dttm.month)
+        if period_diff < 12:
+            period_diff = 12
+
+    return period, period_diff

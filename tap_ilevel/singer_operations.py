@@ -16,6 +16,7 @@ class RequestState:
         end_date = end_date = None
         state = state = None
         id_fields = None
+        period_types = None
         bookmark_field = None
         stream = None
         catalog = None
@@ -23,8 +24,8 @@ class RequestState:
 
 # Given a series of common parameters, combine them into a data structure to minimize
 #   complexity of passing frequently used data as method parameters.
-def get_request_state(client, stream_name, start_date, last_date, end_date, state,
-                      bookmark_field, id_fields, stream, catalog):
+def get_request_state(client, stream_name, start_date, last_date, end_date, state, bookmark_field,
+                        id_fields, period_types, stream, catalog):
     # pylint: disable=attribute-defined-outside-init
     req_state = RequestState()
     req_state.client = client
@@ -39,6 +40,7 @@ def get_request_state(client, stream_name, start_date, last_date, end_date, stat
     req_state.state = state
     req_state.bookmark_field = bookmark_field
     req_state.id_fields = id_fields
+    req_state.period_types = period_types
     req_state.stream = stream
     req_state.catalog = catalog
     return req_state
