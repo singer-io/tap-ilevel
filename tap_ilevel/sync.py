@@ -406,7 +406,7 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
     data_item_search_criteria = req_state.client.factory.create('DataItemsSearchCriteria')
     data_item_search_criteria.GetGlobalDataItemsOnly = True # Global Data Items ONLY
     data_items = req_state.client.service.GetDataItems(data_item_search_criteria)
-    calc_data_items = [i for i in data_items.DataItemObjectEx if i.FormulaTypeIDsString] # TESTING (add): and 'Revenue' in i.Name
+    calc_data_items = [i for i in data_items.DataItemObjectEx if i.FormulaTypeIDsString] # TESTING (add): and 'Gross Margin' in i.Name
     calc_data_items_len = len(calc_data_items)
     last_calc_data_item = calc_data_items[-1]
     
@@ -421,7 +421,7 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
         else: # assets
             entities = req_state.client.service.GetAssets()
             entity_objs = entities.Asset
-            # entity_objs = [i for i in entity_objs if 'Cleo' in i.Name] # TESTING: COMMENT OUT
+            # entity_objs = [i for i in entity_objs if 'Guild Education' in i.Name] # TESTING: COMMENT OUT
         entity_objs_len = len(entity_objs)
     
         # calc_data_items loop
@@ -473,7 +473,7 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
                         i_get_params.Period = period
                         i_get_params.Offset = offset_period
                         i_get_params.EndOfPeriod = latest_date
-                        i_get_params.ReportedDate = latest_date
+                        i_get_params.ReportedDate = current_date
                         i_get_params.CurrencyCode = currency_code
 
                         i_get_params_list.BaseRequestParameters.append(i_get_params)
@@ -500,7 +500,7 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
                             with metrics.http_request_timer(metrics_string) as timer:
                                 data_values = req_state.client.service.iGetBatch(i_get_request)
 
-                            # LOGGER.info('data_values dict = {}'.format(sobject_to_dict(data_values))) # COMMENT OUT
+                            # LOGGER.info('data_values = {}'.format(data_values)) # COMMENT OUT
 
                             if isinstance(data_values, str):
                                 continue
