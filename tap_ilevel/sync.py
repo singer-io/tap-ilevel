@@ -6,7 +6,7 @@ import copy
 
 import singer
 from singer import metrics, metadata, Transformer, utils
-from singer.utils import strptime_to_utc
+from singer.utils import strftime, strptime_to_utc
 
 from tap_ilevel.transform import transform_json, hash_data
 from tap_ilevel.streams import STREAMS
@@ -89,7 +89,8 @@ def process_records(result_records,
                 else:
                     max_bookmark_value = bookmark_dt
 
-                last_dttm = datetime.strptime(last_date, "%Y-%m-%d")
+                # Lookback window, always process last 14 days
+                last_dttm = datetime.strptime(last_date, "%Y-%m-%d") - timedelta(days=14)
 
                 # Keep only records whose bookmark is on after the last_date
                 if bookmark_dttm >= last_dttm:
@@ -552,7 +553,12 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
                                     dimensions = {
                                         'data_item_id': data_item_id,
                                         'entity_id': entity_id,
-                                        'excel_formula': excel_formula
+                                        'scenario_id': scenario_id,
+                                        'period_type': period_type,
+                                        'end_of_period_value': end_of_period_value,
+                                        'currency_code': currency_code,
+                                        'exchange_rate_type': exchange_rate_type,
+                                        'data_value_type': data_value_type
                                     }
                                     hash_key = str(hash_data(json.dumps(dimensions, sort_keys=True)))
 
