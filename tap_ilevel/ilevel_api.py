@@ -342,8 +342,8 @@ def get_investment_transaction_details_by_ids(object_ids, client):
 
 
 def get_standardized_data_id_chunks(start_dt, end_dt, client):
-    adj_start_date = start_dt - timedelta(days=1)
-    adj_end_date = end_dt + timedelta(days=1)
+    adj_start_date = start_dt - timedelta(days=2)
+    adj_end_date = end_dt + timedelta(days=2)
 
     # Perform API call to retrieve 'standardized ids' in preparation for next call
     with metrics.http_request_timer('Retrieve standardized ids') as timer:
@@ -365,6 +365,15 @@ def get_standardized_data_id_chunks(start_dt, end_dt, client):
 def perform_igetbatch_operation_for_standardized_id_set(id_set, req_state):
     data_value_types = req_state.client.factory.create('DataValueTypes')
 
+    # current_date
+    date_types = req_state.client.factory.create('DateTypes')
+    current_date = req_state.client.factory.create('Date')
+    current_date.Type = date_types.Current
+    
+    # latest_date
+    latest_date = req_state.client.factory.create('Date')
+    latest_date.Type = date_types.Latest
+
     req_id = 1
     id_set_len = len(id_set)
     i_get_params_list = req_state.client.factory.create('ArrayOfBaseRequestParameters')
@@ -375,6 +384,9 @@ def perform_igetbatch_operation_for_standardized_id_set(id_set, req_state):
 
         i_get_params.RequestIdentifier = req_id
         i_get_params.DataValueType = getattr(data_value_types, 'ObjectId')
+        i_get_params.EndOfPeriod = latest_date
+        i_get_params.ReportedDate = current_date
+
         i_get_params_list.BaseRequestParameters.append(i_get_params)
 
     i_get_request = req_state.client.factory.create('DataServiceRequest')
@@ -443,7 +455,12 @@ def perform_igetbatch_operation_for_standardized_id_set(id_set, req_state):
                 dimensions = {
                     'data_item_id': data_item_id,
                     'entity_id': entity_id,
-                    'excel_formula': excel_formula
+                    'scenario_id': scenario_id,
+                    'period_type': period_type,
+                    'end_of_period_value': end_of_period_value,
+                    'currency_code': currency_code,
+                    'exchange_rate_type': exchange_rate_type,
+                    'data_value_type': data_value_type
                 }
                 hash_key = str(hash_data(json.dumps(dimensions, sort_keys=True)))
                 new_record = {
