@@ -283,7 +283,7 @@ def __process_incremental_stream(req_state):
 # Given a set of 'stanardized ids', reflecting attributes that have been updated for a given
 #  time window, perform any additional API requests (iGetBatch) to retrieve associated data,
 #  and publish results.
-def process_iget_batch_for_standardized_id_set(std_id_set, req_state, max_bookmark_value):
+def process_iget_batch_for_standardized_id_set(std_id_set, req_state, max_bookmark_value=None):
     update_count = 0
 
     #Retrieve additional details for id criteria.
@@ -348,8 +348,12 @@ def __process_standardized_data_stream(req_state):
         batch = 1
         for id_set in updated_object_id_sets:
             processed_record_count = 0
-            max_bookmark_value, processed_record_count = process_iget_batch_for_standardized_id_set(
-                id_set, req_state, max_bookmark_value)
+            temp_max_bookmark_value, processed_record_count = process_iget_batch_for_standardized_id_set(
+                id_set, req_state)
+            temp_max_bookmark_value_dttm = datetime.strptime(temp_max_bookmark_value, "%Y-%m-%d")
+            max_bookmark_value_dttm = datetime.strptime(max_bookmark_value, "%Y-%m-%d")
+            if temp_max_bookmark_value_dttm > max_bookmark_value_dttm:
+                max_bookmark_value = temp_max_bookmark_value
 
             LOGGER.info('periodic_data_standardized, {} - {}, Batch #{}, Requests: {}, Results: {}'.format(
                 cur_start_date, cur_end_date, batch, len(id_set), processed_record_count))
