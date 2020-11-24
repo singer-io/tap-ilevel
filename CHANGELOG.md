@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.1
+  * Adjust `sync.py` to adjust when/how we bookmark endpoint `periodic_data_standardized`. Currently, we are bookmarking too early and filtering out some records.
+  
 ## 1.0.0
   * Major version change of primary `hash_key` fields for `periodic_data_calculated` and `periodic_data_standardized`. Added lookback window and data window overlap due to some changes not replicating.
 
