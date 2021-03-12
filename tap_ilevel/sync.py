@@ -374,7 +374,7 @@ def __process_standardized_data_stream(req_state):
 def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_code='USD'): # pylint: disable=too-many-statements
     entity_types = ['assets'] # Currently: assets only (not funds)
     period_types = req_state.period_types.strip().replace(' ', '').split(',')
-    batch_size = 10000
+    batch_size = 10
     start_dttm = datetime.strptime(req_state.last_date, '%Y-%m-%d')
     end_dttm = req_state.end_date
     max_bookmark_value = req_state.last_date
@@ -407,7 +407,7 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
     data_item_search_criteria = req_state.client.factory.create('DataItemsSearchCriteria')
     data_item_search_criteria.GetGlobalDataItemsOnly = True # Global Data Items ONLY
     data_items = req_state.client.service.GetDataItems(data_item_search_criteria)
-    calc_data_items = [i for i in data_items.DataItemObjectEx if i.FormulaTypeIDsString] # TESTING (add): and 'Gross Margin' in i.Name
+    calc_data_items = [i for i in data_items.DataItemObjectEx if i.FormulaTypeIDsString and i.Id == 5000] # TESTING (add): and 'Gross Margin' in i.Name
     calc_data_items_len = len(calc_data_items)
 
     # entity_type loop
@@ -437,7 +437,8 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
 
             # entity loop
             ent = 1
-            for entity in entity_objs:
+            test_entities = [e for e in entity_objs if e.InitialPeriod < datetime(2016, 1, 1)]
+            for entity in test_entities:
                 entity_dict = ilevel.sobject_to_dict(entity)
                 entity_id = entity_dict.get('Id')
                 # LOGGER.info('entity = {} ({})'.format(entity_name, entity_id)) # COMMENT OUT
@@ -491,7 +492,7 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
                             i_get_request.IncludeStandardizedDataInfo = True
                             i_get_request.IncludeExcelFormula = True
                             i_get_request.ParametersList = i_get_params_list
-                            # LOGGER.info('i_get_request = {}'.format(i_get_request)) # COMMENT OUT
+                            LOGGER.info('i_get_request = {}'.format(i_get_request)) # COMMENT OUT
 
                             # pylint: disable=unused-variable
                             metrics_string = ('periodic_data_calculated, iGetBatch #{}: {} requests'.format(
@@ -499,7 +500,7 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
                             with metrics.http_request_timer(metrics_string) as timer:
                                 data_values = req_state.client.service.iGetBatch(i_get_request)
 
-                            # LOGGER.info('data_values = {}'.format(data_values)) # COMMENT OUT
+                            LOGGER.info('data_values = {}'.format(data_values)) # COMMENT OUT
 
                             if isinstance(data_values, str):
                                 continue
@@ -532,6 +533,7 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
                                     else:
                                         value_numeric = None
                                     if value == 'No Data Available':
+                                        LOGGER.info(transformed_record.get("sd_parameters").get("end_of_period").get("value"))
                                         continue
                                     sd_parameters = transformed_record.get('sd_parameters', {})
                                     excel_formula = transformed_record.get('excel_formula')
