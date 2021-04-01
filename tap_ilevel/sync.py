@@ -374,8 +374,7 @@ def __process_standardized_data_stream(req_state):
 def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_code='USD'): # pylint: disable=too-many-statements
     entity_types = ['assets'] # Currently: assets only (not funds)
     period_types = req_state.period_types.strip().replace(' ', '').split(',')
-    batch_size = 10
-    start_dttm = datetime.strptime(req_state.last_date, '%Y-%m-%d')
+    batch_size = 10000
     end_dttm = req_state.end_date
     max_bookmark_value = req_state.last_date
 
@@ -407,7 +406,7 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
     data_item_search_criteria = req_state.client.factory.create('DataItemsSearchCriteria')
     data_item_search_criteria.GetGlobalDataItemsOnly = True # Global Data Items ONLY
     data_items = req_state.client.service.GetDataItems(data_item_search_criteria)
-    calc_data_items = [i for i in data_items.DataItemObjectEx if i.FormulaTypeIDsString and i.Id == 5000] # TESTING (add): and 'Gross Margin' in i.Name
+    calc_data_items = [i for i in data_items.DataItemObjectEx if i.FormulaTypeIDsString] # TESTING (add): and 'Gross Margin' in i.Name
     calc_data_items_len = len(calc_data_items)
 
     # entity_type loop
@@ -437,13 +436,14 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
 
             # entity loop
             ent = 1
-            test_entities = [e for e in entity_objs if e.InitialPeriod < datetime(2016, 1, 1)]
-            for entity in test_entities:
+            for entity in entity_objs:
                 entity_dict = ilevel.sobject_to_dict(entity)
                 entity_id = entity_dict.get('Id')
                 # LOGGER.info('entity = {} ({})'.format(entity_name, entity_id)) # COMMENT OUT
                 entity_initial_dttm = datetime.strptime(entity_dict.get('InitialPeriod')[:10], '%Y-%m-%d')
+                start_dttm = datetime.strptime(req_state.last_date, '%Y-%m-%d')
                 max_dttm = [start_dttm, entity_initial_dttm]
+                # Choose the earliest date for which there is data for an entity
                 start_dttm = max(i for i in max_dttm if i is not None)
 
                 # LOGGER.info('periodic_data_calculated: {}, {}: {} ({})'.format(
@@ -492,7 +492,7 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
                             i_get_request.IncludeStandardizedDataInfo = True
                             i_get_request.IncludeExcelFormula = True
                             i_get_request.ParametersList = i_get_params_list
-                            LOGGER.info('i_get_request = {}'.format(i_get_request)) # COMMENT OUT
+                            # LOGGER.info('i_get_request = {}'.format(i_get_request)) # COMMENT OUT
 
                             # pylint: disable=unused-variable
                             metrics_string = ('periodic_data_calculated, iGetBatch #{}: {} requests'.format(
@@ -500,7 +500,7 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
                             with metrics.http_request_timer(metrics_string) as timer:
                                 data_values = req_state.client.service.iGetBatch(i_get_request)
 
-                            LOGGER.info('data_values = {}'.format(data_values)) # COMMENT OUT
+                            # LOGGER.info('data_values = {}'.format(data_values)) # COMMENT OUT
 
                             if isinstance(data_values, str):
                                 continue
