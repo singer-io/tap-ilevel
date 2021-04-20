@@ -533,7 +533,7 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
                                     else:
                                         value_numeric = None
                                     if value == 'No Data Available':
-                                        LOGGER.info(transformed_record.get("sd_parameters").get("end_of_period").get("value"))
+                                        LOGGER.info('No Data Available, skipping record')
                                         continue
                                     sd_parameters = transformed_record.get('sd_parameters', {})
                                     excel_formula = transformed_record.get('excel_formula')
