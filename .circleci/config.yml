@@ -10,13 +10,13 @@ jobs:
           command: |
             python3 -mvenv /usr/local/share/virtualenvs/tap-ilevel
             source /usr/local/share/virtualenvs/tap-ilevel/bin/activate
-            pip install -U 'pip<19.2' 'setuptools<51.0.0'
+            pip install -U pip setuptools
             pip install .[dev]
       - run:
           name: 'JSON Validator'
           command: |
             source /usr/local/share/virtualenvs/tap-tester/bin/activate
-            stitch-validate-json /usr/local/share/virtualenvs/tap-ilevel/lib/python3.5/site-packages/tap_ilevel/schemas/*.json
+            stitch-validate-json tap_ilevel/schemas/*.json
       - run:
           name: 'pylint'
           command: |
