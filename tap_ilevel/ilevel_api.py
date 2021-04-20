@@ -1,6 +1,6 @@
 from datetime import time, datetime, timedelta
-import dateutil.parser
 import json
+import dateutil.parser
 
 import singer
 from singer import metrics
@@ -54,7 +54,7 @@ def obj_to_dict(obj):
             # All iLevel datateimes are UTC (Z) time zone
             dttm = '{}Z'.format(obj.isoformat()).replace('+00:00', '')
             return dttm
-        elif type(obj) == type(None):
+        elif obj is None:
             return obj
         elif isinstance(obj, (int, float, bool, list, dict)):
             return obj
@@ -88,7 +88,7 @@ def sobject_to_dict(obj, key_to_lower=False, json_serialize=True):
             # All iLevel datateimes are UTC (Z) time zone
             dttm = '{}Z'.format(obj.isoformat()).replace('+00:00', '')
             return dttm
-        elif type(obj) == type(None):
+        elif obj is None:
             return obj
         elif isinstance(obj, (int, float, bool, list, dict)):
             return obj
@@ -206,9 +206,8 @@ def get_all_objects(stream_name, client):
     else:
         try:
             response = sobject_to_dict(call_response).get(data_key, [])
-        except AttributeError as err:
-            LOGGER.info('ERROR call_response = {}'.format(sobject_to_dict(call_response)))
-            pass
+        except AttributeError:
+            LOGGER.info('ERROR call_response = %s', sobject_to_dict(call_response))
 
     return response
 
@@ -237,9 +236,8 @@ def get_object_details_by_ids(object_ids, stream_name, client):
     try:
         # response = call_response.NamedEntity
         response = sobject_to_dict(call_response).get(data_key, [])
-    except AttributeError as err:
-        LOGGER.info('ERROR call_response = {}'.format(sobject_to_dict(call_response)))
-        pass
+    except AttributeError:
+        LOGGER.info('ERROR call_response = %s', sobject_to_dict(call_response))
 
     return response
 
@@ -257,10 +255,9 @@ def split_ids_into_chunks(data, max_len):
 #  date windows.
 def get_deleted_object_id_sets(start_dt, end_dt, client, stream_name):
     object_type = client.factory.create('tns:UpdatedObjectTypes')
-    asset_ref, data_key = __get_asset_ref(object_type, stream_name)
+    asset_ref, _ = __get_asset_ref(object_type, stream_name)
 
-    # pylint: disable=unused-variable
-    with metrics.http_request_timer('Retrieve deleted object data summary') as timer:
+    with metrics.http_request_timer('Retrieve deleted object data summary'):
         call_response = client.service.GetDeletedObjects(asset_ref, start_dt, end_dt)
 
     if isinstance(call_response, str):
@@ -268,9 +265,8 @@ def get_deleted_object_id_sets(start_dt, end_dt, client, stream_name):
 
     try:
         deleted_asset_ids_all = call_response.int
-    except AttributeError as err:
-        LOGGER.info('ERROR call_response = {}'.format(sobject_to_dict(call_response)))
-        pass
+    except AttributeError:
+        LOGGER.info('ERROR call_response = %s', sobject_to_dict(call_response))
 
     if isinstance(deleted_asset_ids_all, str) or len(deleted_asset_ids_all) < 1:
         return []
@@ -282,7 +278,7 @@ def get_deleted_object_id_sets(start_dt, end_dt, client, stream_name):
 #  date windows. Date window must not exceed maximum window period.
 def get_updated_object_id_sets(start_dt, end_dt, client, stream_name):
     object_type = client.factory.create('tns:UpdatedObjectTypes')
-    asset_ref, data_key = __get_asset_ref(object_type, stream_name)
+    asset_ref, _ = __get_asset_ref(object_type, stream_name)
 
     if abs((start_dt - end_dt).days) > MAX_DATE_WINDOW:
         fmt = "%Y-%m-%d"
@@ -299,9 +295,8 @@ def get_updated_object_id_sets(start_dt, end_dt, client, stream_name):
     updated_asset_ids_all = []
     try:
         updated_asset_ids_all = call_response.int
-    except AttributeError as err:
-        LOGGER.info('ERROR call_response = {}'.format(sobject_to_dict(call_response)))
-        pass
+    except AttributeError:
+        LOGGER.info('ERROR call_response = %s', sobject_to_dict(call_response))
 
     if isinstance(updated_asset_ids_all, str) or len(updated_asset_ids_all) < 1:
         return []
@@ -333,9 +328,9 @@ def get_investment_transaction_details_by_ids(object_ids, client):
         # response = call_response.InvestmentTransaction
         response = sobject_to_dict(call_response).get('InvestmentTransaction', [])
     except AttributeError as err:
-        LOGGER.info('{}'.format(err))
-        LOGGER.info('ERROR criteria = {}'.format(criteria))
-        LOGGER.info('ERROR call_response dict = {}'.format(sobject_to_dict(call_response)))
+        LOGGER.info('%s', err)
+        LOGGER.info('ERROR criteria = %s', criteria)
+        LOGGER.info('ERROR call_response dict = %s', sobject_to_dict(call_response))
         raise err
 
     return response
@@ -354,22 +349,22 @@ def get_standardized_data_id_chunks(start_dt, end_dt, client):
     if isinstance(updated_data_ids, str):
         return []
 
-    data = updated_data_ids.int  
+    data = updated_data_ids.int
     chunks = split_ids_into_chunks(data, MAX_ID_CHUNK_SIZE)
-    
+
     return chunks
 
 
 # Perform iGetBatch operations for a given set of 'standardized ids', which will return
 #  periodic data.
-def perform_igetbatch_operation_for_standardized_id_set(id_set, req_state):
+def perform_igetbatch_operation_for_standardized_id_set(id_set, req_state): # pylint: disable=too-many-statements
     data_value_types = req_state.client.factory.create('DataValueTypes')
 
     # current_date
     date_types = req_state.client.factory.create('DateTypes')
     current_date = req_state.client.factory.create('Date')
     current_date.Type = date_types.Current
-    
+
     # latest_date
     latest_date = req_state.client.factory.create('Date')
     latest_date.Type = date_types.Latest
@@ -407,8 +402,8 @@ def perform_igetbatch_operation_for_standardized_id_set(id_set, req_state):
     try:
         periodic_data_records = data_values.DataValue
     except Exception as err:
-        LOGGER.error('{}'.format(err))
-        LOGGER.error('data_values dict = {}'.format(sobject_to_dict(data_values)))
+        LOGGER.error('%s', err)
+        LOGGER.error('data_values dict = %s', sobject_to_dict(data_values))
         raise err
 
     results = []
@@ -482,7 +477,7 @@ def perform_igetbatch_operation_for_standardized_id_set(id_set, req_state):
                     'value_string': value_string,
                     'value_numeric': value_numeric
                 }
-                
+
                 results.append(new_record)
             # end for rec in periodic_data_records
 
