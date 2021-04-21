@@ -375,7 +375,6 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
     entity_types = ['assets'] # Currently: assets only (not funds)
     period_types = req_state.period_types.strip().replace(' ', '').split(',')
     batch_size = 10000
-    start_dttm = datetime.strptime(req_state.last_date, '%Y-%m-%d')
     end_dttm = req_state.end_date
     max_bookmark_value = req_state.last_date
 
@@ -442,7 +441,9 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
                 entity_id = entity_dict.get('Id')
                 # LOGGER.info('entity = {} ({})'.format(entity_name, entity_id)) # COMMENT OUT
                 entity_initial_dttm = datetime.strptime(entity_dict.get('InitialPeriod')[:10], '%Y-%m-%d')
+                start_dttm = datetime.strptime(req_state.last_date, '%Y-%m-%d')
                 max_dttm = [start_dttm, entity_initial_dttm]
+                # Choose the earliest date for which there is data for an entity
                 start_dttm = max(i for i in max_dttm if i is not None)
 
                 # LOGGER.info('periodic_data_calculated: {}, {}: {} ({})'.format(
@@ -532,6 +533,7 @@ def __process_periodic_data_calcs(req_state, scenario_name='Actual', currency_co
                                     else:
                                         value_numeric = None
                                     if value == 'No Data Available':
+                                        LOGGER.info('No Data Available, skipping record')
                                         continue
                                     sd_parameters = transformed_record.get('sd_parameters', {})
                                     excel_formula = transformed_record.get('excel_formula')
