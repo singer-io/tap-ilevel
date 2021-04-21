@@ -10,18 +10,18 @@ jobs:
           command: |
             python3 -mvenv /usr/local/share/virtualenvs/tap-ilevel
             source /usr/local/share/virtualenvs/tap-ilevel/bin/activate
-            pip install -U 'pip<19.2' 'setuptools<51.0.0'
+            pip install -U pip setuptools
             pip install .[dev]
       - run:
           name: 'JSON Validator'
           command: |
             source /usr/local/share/virtualenvs/tap-tester/bin/activate
-            stitch-validate-json /usr/local/share/virtualenvs/tap-ilevel/lib/python3.5/site-packages/tap_ilevel/schemas/*.json
+            stitch-validate-json tap_ilevel/schemas/*.json
       - run:
           name: 'pylint'
           command: |
             source /usr/local/share/virtualenvs/tap-ilevel/bin/activate
-            pylint tap_ilevel -d 'broad-except,chained-comparison,empty-docstring,fixme,invalid-name,line-too-long,missing-class-docstring,missing-function-docstring,missing-module-docstring,no-else-raise,no-else-return,too-few-public-methods,too-many-arguments,too-many-branches,too-many-lines,too-many-locals,ungrouped-imports,wrong-spelling-in-comment,wrong-spelling-in-docstring,too-many-return-statements,too-many-instance-attributes'
+            pylint tap_ilevel -d 'broad-except,chained-comparison,empty-docstring,fixme,invalid-name,line-too-long,missing-class-docstring,missing-function-docstring,missing-module-docstring,no-else-raise,no-else-return,too-few-public-methods,too-many-arguments,too-many-branches,too-many-lines,too-many-locals,ungrouped-imports,wrong-spelling-in-comment,wrong-spelling-in-docstring,too-many-return-statements,too-many-instance-attributes' --min-similarity-lines=20
 
 workflows:
   version: 2

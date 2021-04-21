@@ -32,7 +32,8 @@ class SoapFixer(MessagePlugin):
         # incompatible XML.
         context.envelope.walk(self.fix_any_type_string)
 
-    def fix_any_type_string(self, element):
+    @staticmethod
+    def fix_any_type_string(element):
         """Used as a filter function with walk in order to fix errors.
         If the element has a certain name, give it a xsi:type=xsd:int. Note that the nsprefix xsd
         must also be added in to make this work."""
@@ -69,7 +70,7 @@ def main():
     wsdl_quarter = config.get('wsdl_quarter', 'Q1')
     sandbox_flag = config.get('is_sandbox', 'false')
     is_sandbox = False
-    if sandbox_flag == "true" or sandbox_flag == "True":
+    if sandbox_flag in {"true", "True"}:
         is_sandbox = True
 
     LOGGER.info('init: is sandbox: %s', config.get('is_sandbox'))
