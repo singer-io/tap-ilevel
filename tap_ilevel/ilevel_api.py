@@ -175,18 +175,27 @@ def get_all_objects(stream_name, client):
             data_key = 'Investment'
         elif stream_name == 'asset_to_asset_relations':
             relationships = client.service.GetObjectRelationships()
-            call_response = (relation for relation in relationships.ObjectRelationship if \
-                relation.TypeId == objectType.AssetToAsset)
+            if relationships:
+                call_response = (relation for relation in relationships.ObjectRelationship if \
+                    relation.TypeId == objectType.AssetToAsset)
+            else:
+                call_response = []
             data_key = 'ObjectRelationship'
         elif stream_name == 'fund_to_asset_relations':
             relationships = client.service.GetObjectRelationships()
-            call_response = (relation for relation in relationships.ObjectRelationship if \
-                relation.TypeId == objectType.FundToAsset)
+            if relationships:
+                call_response = (relation for relation in relationships.ObjectRelationship if \
+                    relation.TypeId == objectType.FundToAsset)
+            else:
+                call_response = []
             data_key = 'ObjectRelationship'
         elif stream_name == 'fund_to_fund_relations':
             relationships = client.service.GetObjectRelationships()
-            call_response = (relation for relation in relationships.ObjectRelationship if \
-                relation.TypeId == objectType.FundToFund)
+            if relationships:
+                call_response = (relation for relation in relationships.ObjectRelationship if \
+                    relation.TypeId == objectType.FundToFund)
+            else:
+                call_response = []
             data_key = 'ObjectRelationship'
         elif stream_name == 'data_items':
             searchCriteria = client.factory.create('DataItemsSearchCriteria')
