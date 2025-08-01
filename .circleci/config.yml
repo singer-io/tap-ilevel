@@ -10,7 +10,7 @@ jobs:
           command: |
             uv venv --python 3.9 /usr/local/share/virtualenvs/tap-ilevel
             source /usr/local/share/virtualenvs/tap-ilevel/bin/activate
-            uv pip install -U pip setuptools<81
+            uv pip install -U pip 'setuptools<81'
             uv pip install .[dev]
       - run:
           name: 'JSON Validator'
